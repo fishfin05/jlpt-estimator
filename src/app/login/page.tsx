@@ -7,9 +7,12 @@ import { createClient } from "@/lib/supabase/client";
 function LoginForm() {
   const params = useSearchParams();
   const next = params.get("next") || "/";
+  const authError = params.get("error");
   const [email, setEmail] = useState("");
-  const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
-  const [message, setMessage] = useState("");
+  const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">(authError ? "error" : "idle");
+  const [message, setMessage] = useState(
+    authError ? `${decodeURIComponent(authError)} — request a fresh link below (each link works only once).` : "",
+  );
 
   async function sendLink(e: React.FormEvent) {
     e.preventDefault();

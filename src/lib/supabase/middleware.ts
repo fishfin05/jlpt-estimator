@@ -8,6 +8,30 @@ type CookieToSet = { name: string; value: string; options: CookieOptions };
  * protected routes. Called from the root middleware.ts.
  */
 export async function updateSession(request: NextRequest) {
+  const { searchParams, pathname } = request.nextUrl;
+
+  // Auth-link fallback: Supabase may deliver the `?code=` (or an error) to the
+  // Site URL (e.g. "/") instead of /auth/callback when the exact callback URL
+  // isn't allowlisted. Catch it anywhere and route it to the callback handler.
+  if (pathname !== "/auth/callback") {
+    if (searchParams.has("code")) {
+      const url = request.nextUrl.clone();
+      const code = searchParams.get("code")!;
+      url.pathname = "/auth/callback";
+      url.search = "";
+      url.searchParams.set("code", code);
+      url.searchParams.set("next", searchParams.get("next") || "/");
+      return NextResponse.redirect(url);
+    }
+    if (searchParams.has("error") && pathname !== "/login") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      url.search = "";
+      url.searchParams.set("error", searchParams.get("error_description") || searchParams.get("error")!);
+      return NextResponse.redirect(url);
+    }
+  }
+
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -35,8 +59,6 @@ export async function updateSession(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
-  const { pathname } = request.nextUrl;
 
   // Routes that require a logged-in user.
   const protectedPrefixes = ["/quiz", "/dashboard"];
