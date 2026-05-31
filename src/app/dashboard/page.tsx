@@ -27,13 +27,13 @@ interface SessionRow {
   levels: Record<string, { correct?: number; total?: number }> | null;
 }
 
-function Movement({ m }: { m: KillListEntry["movement"] }) {
-  if (m.dir === "new")
-    return <span style={{ color: "var(--primary)", fontWeight: 700, fontSize: "0.72rem" }}>★ NEW</span>;
-  if (m.dir === "same") return <span className="muted">—</span>;
-  if (m.dir === "up")
-    return <span style={{ color: "var(--error)", fontWeight: 600 }}>▲ {m.delta}</span>;
-  return <span style={{ color: "var(--success)", fontWeight: 600 }}>▼ {m.delta}</span>;
+function Trend({ t }: { t: KillListEntry["trend"] }) {
+  if (t === "new")
+    return <span style={{ color: "var(--primary)", fontWeight: 700, fontSize: "0.72rem" }}>★ new</span>;
+  if (t === "same") return <span className="muted">—</span>;
+  if (t === "up")
+    return <span style={{ color: "var(--error)", fontWeight: 600, fontSize: "0.78rem" }} title="getting worse">▲ worse</span>;
+  return <span style={{ color: "var(--success)", fontWeight: 600, fontSize: "0.78rem" }} title="improving">▼ better</span>;
 }
 
 const LEVEL_NUM: Record<string, number> = {
@@ -158,11 +158,16 @@ export default async function DashboardPage() {
     if (a.correct) perLevel[a.level].correct++;
   }
 
-  // Per-item proficiency powers both the Most Wanted board (with rank movement
-  // vs. before the latest quiz) and the knowledge table below.
-  const { all: knowledge, killList } = buildProficiency(
-    rows,
-    recentSessions[0]?.created_at ?? null,
+  // Per-item proficiency powers both the Most Wanted board and the knowledge
+  // table. The Kill List is selected by threat (worst items) then displayed
+  // easiest → hardest so you clear foundations (N5/N4) before N1.
+  const { all: knowledge, killList } = buildProficiency(rows);
+  const killListSorted = [...killList].sort(
+    (a, b) =>
+      LEVELS.indexOf(a.level as (typeof LEVELS)[number]) -
+        LEVELS.indexOf(b.level as (typeof LEVELS)[number]) ||
+      b.missed - a.missed ||
+      b.seen - a.seen,
   );
   const tagOrder: Record<string, number> = { Weak: 0, Shaky: 1, New: 2, Solid: 3 };
   const knowledgeSorted = [...knowledge].sort(
@@ -255,21 +260,19 @@ export default async function DashboardPage() {
                   <table className="table">
                     <thead>
                       <tr>
-                        <th>#</th>
-                        <th>Move</th>
                         <th>Item</th>
                         <th>Level</th>
+                        <th>Trend</th>
                         <th>Missed</th>
                         <th>Seen</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {killList.map((s) => (
+                      {killListSorted.map((s) => (
                         <tr key={`${s.type}:${s.item}`}>
-                          <td className="muted" style={{ fontWeight: 700 }}>{s.rank}</td>
-                          <td><Movement m={s.movement} /></td>
                           <td style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: "1.1rem" }}>{s.item}</td>
                           <td><span className={`level-tag ${s.level}`}>{s.level}</span></td>
+                          <td><Trend t={s.trend} /></td>
                           <td className="badge-wrong">{s.missed}</td>
                           <td className="muted">{s.seen}</td>
                         </tr>

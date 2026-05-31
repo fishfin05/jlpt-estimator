@@ -11,6 +11,7 @@ export interface SessionPoint {
 }
 
 const LEVEL_LABELS = ["<N5", "N5", "N4", "N3", "N2", "N1"];
+const LEVEL_RANK: Record<string, number> = { N5: 0, N4: 1, N3: 2, N2: 3, N1: 4 };
 
 type Metric = "level" | "accuracy";
 
@@ -241,28 +242,33 @@ export default function ProgressChart({ points }: { points: SessionPoint[] }) {
                   Nothing missed this quiz 🎉
                 </span>
               ) : (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
-                  <span className="muted" style={{ fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                    Missed:
+                <>
+                  <span className="muted" style={{ fontSize: "0.7rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                    Missed this quiz ({p.missed.length}) — easiest first
                   </span>
-                  {p.missed.map((m, k) => (
-                    <span
-                      key={k}
-                      style={{
-                        fontFamily: "'Noto Sans JP', sans-serif",
-                        fontSize: "0.95rem",
-                        padding: "2px 8px",
-                        borderRadius: 6,
-                        background: "var(--error-light)",
-                        color: "var(--text)",
-                        border: "1px solid rgba(239,68,68,0.3)",
-                      }}
-                      title={`${m.type} · ${m.level}`}
-                    >
-                      {m.item} <span className="muted" style={{ fontSize: "0.7rem" }}>{m.level}</span>
-                    </span>
-                  ))}
-                </div>
+                  <div className="scroll-table" style={{ maxHeight: 220, marginTop: 6 }}>
+                    <table className="table" style={{ fontSize: "0.8rem" }}>
+                      <thead>
+                        <tr>
+                          <th>Item</th>
+                          <th>Type</th>
+                          <th>Level</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[...p.missed]
+                          .sort((a, b) => (LEVEL_RANK[a.level] ?? 9) - (LEVEL_RANK[b.level] ?? 9))
+                          .map((m, k) => (
+                            <tr key={k}>
+                              <td style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: "1rem" }}>{m.item}</td>
+                              <td className="muted">{m.type}</td>
+                              <td><span className={`level-tag ${m.level}`}>{m.level}</span></td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               )}
             </div>
             <p className="method-note" style={{ marginTop: 8, fontSize: "0.75rem" }}>

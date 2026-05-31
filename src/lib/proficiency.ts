@@ -2,11 +2,9 @@
 //
 // From a user's raw attempt history this derives, for every kanji/vocab item:
 //   - a recency-weighted accuracy (recent attempts count more than old ones),
-//   - a "threat" score used to rank the Most Wanted (Kill List),
-//   - a proficiency tag (Solid / Shaky / Weak / New).
-// It also produces rank-movement for the Kill List by comparing the current
-// ranking to the ranking as it stood *before* the most recent quiz — no extra
-// storage needed, just a replay of history.
+//   - a "threat" score used to pick the Most Wanted (Kill List),
+//   - a proficiency tag (Solid / Shaky / Weak / New),
+//   - a per-item trend (are you getting this item better or worse lately?).
 
 export interface AttemptLite {
   item_type: "kanji" | "vocab";
@@ -17,6 +15,7 @@ export interface AttemptLite {
 }
 
 export type ProfTag = "Solid" | "Shaky" | "Weak" | "New";
+export type Trend = "up" | "down" | "same" | "new"; // up = worse, down = better
 
 export interface ItemStat {
   key: string;
@@ -31,12 +30,7 @@ export interface ItemStat {
 }
 
 export interface KillListEntry extends ItemStat {
-  rank: number; // 1 = most wanted
-  movement:
-    | { dir: "new" }
-    | { dir: "same" }
-    | { dir: "up"; delta: number } // climbed toward #1 (getting worse)
-    | { dir: "down"; delta: number }; // slid down (improving)
+  trend: Trend;
 }
 
 // How fast older attempts fade. 0.6 → most recent attempt counts most, the one
@@ -49,7 +43,8 @@ interface RawStat {
   level: string;
   seen: number;
   missed: number;
-  weightedMissRate: number;
+  weightedMissRate: number; // recency-weighted
+  flatMissRate: number; // simple missed/seen
 }
 
 function groupByItem(attempts: AttemptLite[]): Map<string, AttemptLite[]> {
@@ -87,6 +82,7 @@ function rawStat(attempts: AttemptLite[]): RawStat {
     seen: ordered.length,
     missed,
     weightedMissRate: wSum ? wMiss / wSum : 0,
+    flatMissRate: ordered.length ? missed / ordered.length : 0,
   };
 }
 
@@ -105,6 +101,17 @@ function tagOf(s: RawStat): ProfTag {
   return "Weak";
 }
 
+// Trend: is recent performance better or worse than this item's overall average?
+// Recency-weighted miss rate vs. the flat miss rate — no cross-item ranking, so
+// no tie-shuffling noise.
+function trendOf(s: RawStat): Trend {
+  if (s.seen < 2) return "new";
+  const eps = 0.05;
+  if (s.weightedMissRate < s.flatMissRate - eps) return "down"; // recent better
+  if (s.weightedMissRate > s.flatMissRate + eps) return "up"; // recent worse
+  return "same";
+}
+
 function toItemStat(key: string, s: RawStat): ItemStat {
   return {
     key,
@@ -119,60 +126,25 @@ function toItemStat(key: string, s: RawStat): ItemStat {
   };
 }
 
-// Ranking of all missed items by threat (1-based). Returns key → rank.
-function rankMap(attempts: AttemptLite[]): Map<string, number> {
-  const ranked = [...groupByItem(attempts).entries()]
-    .map(([key, list]) => ({ key, s: rawStat(list) }))
-    .filter((x) => x.s.missed > 0)
-    .sort((a, b) => threatOf(b.s) - threatOf(a.s) || b.s.seen - a.s.seen);
-  const map = new Map<string, number>();
-  ranked.forEach((x, i) => map.set(x.key, i + 1));
-  return map;
-}
-
 export interface ProficiencyResult {
   /** Every item the user has encountered, for the knowledge table. */
   all: ItemStat[];
-  /** Top-N most wanted, with rank movement vs. before the latest quiz. */
+  /** The worst N items (selected by threat), each with a per-item trend. */
   killList: KillListEntry[];
 }
 
-export function buildProficiency(
-  attempts: AttemptLite[],
-  cutoffISO: string | null,
-  topN = 10,
-): ProficiencyResult {
+export function buildProficiency(attempts: AttemptLite[], topN = 10): ProficiencyResult {
   const groups = groupByItem(attempts);
 
-  const all: ItemStat[] = [...groups.entries()].map(([key, list]) =>
-    toItemStat(key, rawStat(list)),
-  );
+  const raw = [...groups.entries()].map(([key, list]) => ({ key, s: rawStat(list) }));
 
-  // Current ranking and the ranking as of before the most recent session.
-  const nowRank = rankMap(attempts);
-  const beforeRank = cutoffISO
-    ? rankMap(attempts.filter((a) => new Date(a.created_at).getTime() < new Date(cutoffISO).getTime()))
-    : new Map<string, number>();
+  const all: ItemStat[] = raw.map(({ key, s }) => toItemStat(key, s));
 
-  const statByKey = new Map(all.map((s) => [s.key, s]));
-
-  const killList: KillListEntry[] = [...nowRank.entries()]
-    .sort((a, b) => a[1] - b[1])
+  const killList: KillListEntry[] = raw
+    .filter(({ s }) => s.missed > 0)
+    .sort((a, b) => threatOf(b.s) - threatOf(a.s) || b.s.seen - a.s.seen)
     .slice(0, topN)
-    .map(([key, rank]) => {
-      const stat = statByKey.get(key)!;
-      const prev = beforeRank.get(key);
-      let movement: KillListEntry["movement"];
-      if (prev === undefined) {
-        movement = { dir: "new" };
-      } else {
-        const delta = prev - rank; // >0 climbed toward #1 (worse)
-        if (delta > 0) movement = { dir: "up", delta };
-        else if (delta < 0) movement = { dir: "down", delta: -delta };
-        else movement = { dir: "same" };
-      }
-      return { ...stat, rank, movement };
-    });
+    .map(({ key, s }) => ({ ...toItemStat(key, s), trend: trendOf(s) }));
 
   return { all, killList };
 }

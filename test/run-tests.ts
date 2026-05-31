@@ -262,7 +262,7 @@ function testProficiency() {
     { item_type: "kanji", item: "山", level: "N5", correct: true, created_at: iso(2) },
   ];
 
-  const { all, killList } = buildProficiency(attempts, null);
+  const { all, killList } = buildProficiency(attempts);
   const byItem = Object.fromEntries(all.map((s) => [s.item, s]));
 
   check("tag 食 = Weak", byItem["食"]?.tag === "Weak", byItem["食"]?.tag);
@@ -272,20 +272,16 @@ function testProficiency() {
 
   check("Solid item 山 is NOT on the kill list", !killList.some((k) => k.item === "山"));
   check("chronic 食 is on the kill list", killList.some((k) => k.item === "食"));
-  const rankFood = killList.find((k) => k.item === "食")?.rank;
-  const rankSun = killList.find((k) => k.item === "日")?.rank;
-  check("食 outranks 日 on the kill list", rankFood !== undefined && (rankSun === undefined || rankFood < rankSun));
+  const threatFood = killList.find((k) => k.item === "食")?.threat ?? 0;
+  const threatSun = killList.find((k) => k.item === "日")?.threat ?? 0;
+  check("食 has higher threat than 日", threatFood > threatSun, `${threatFood.toFixed(2)} vs ${threatSun.toFixed(2)}`);
 
-  // Rank movement: cutoff = most recent day, so the latest attempts are "new".
-  const cut = iso(0.5); // half a day ago → excludes only the most-recent (iso(1)) attempts?
-  const moved = buildProficiency(attempts, iso(2));
-  const foodEntry = moved.killList.find((k) => k.item === "食");
-  check("rank movement is computed (食 has a movement dir)", !!foodEntry && !!foodEntry.movement.dir);
-  void cut;
-
-  // All-new case: cutoff before all history → everything NEW.
-  const allNew = buildProficiency(attempts, iso(100));
-  check("with no prior history, kill list entries are NEW", allNew.killList.every((k) => k.movement.dir === "new"));
+  // Trend: 日 improved (old misses, recent corrects) → 'down' (better).
+  const sunTrend = killList.find((k) => k.item === "日")?.trend;
+  check("日 trend = down (improving)", sunTrend === "down" || sunTrend === undefined, `${sunTrend}`);
+  // 食 missed every time → not improving.
+  const foodTrend = killList.find((k) => k.item === "食")?.trend;
+  check("食 trend is 'same' (no improvement)", foodTrend === "same", `${foodTrend}`);
 }
 
 // ─── Section 4: Live Supabase data ────────────────────────────
