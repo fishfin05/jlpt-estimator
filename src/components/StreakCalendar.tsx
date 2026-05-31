@@ -8,152 +8,73 @@ function ymd(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-function intensity(count: number): string {
-  if (count <= 0) return "var(--bg2)";
-  if (count === 1) return "rgba(124,58,237,0.35)";
-  if (count === 2) return "rgba(124,58,237,0.6)";
-  if (count <= 4) return "rgba(124,58,237,0.8)";
-  return "var(--primary)";
-}
-
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
 /**
- * A GitHub-style activity heatmap of quiz days, plus current/longest streaks.
+ * Streak summary: current run, longest run, and total active days.
  * `dates` are ISO timestamps of every saved session.
  */
-export default function StreakCalendar({
-  dates,
-  weeks = 53,
-}: {
-  dates: string[];
-  weeks?: number;
-}) {
-  // Bucket sessions by local day.
-  const counts = new Map<string, number>();
-  for (const iso of dates) {
-    const key = ymd(new Date(iso));
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-  }
+export default function StreakCalendar({ dates }: { dates: string[] }) {
+  const activeDays = new Set(dates.map((iso) => ymd(new Date(iso))));
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const todayDow = today.getDay(); // 0 = Sunday
 
-  // Grid start = the Sunday that begins the leftmost column.
-  const start = new Date(today.getTime() - (todayDow + (weeks - 1) * 7) * DAY_MS);
-
-  // Build columns (weeks) × 7 rows (Sun→Sat).
-  const columns: { date: Date | null; key: string; count: number }[][] = [];
-  const monthLabels: { col: number; label: string }[] = [];
-  let lastMonth = -1;
-
-  for (let col = 0; col < weeks; col++) {
-    const colCells: { date: Date | null; key: string; count: number }[] = [];
-    for (let row = 0; row < 7; row++) {
-      const d = new Date(start.getTime() + (col * 7 + row) * DAY_MS);
-      if (d.getTime() > today.getTime()) {
-        colCells.push({ date: null, key: `empty-${col}-${row}`, count: 0 });
-        continue;
-      }
-      const key = ymd(d);
-      colCells.push({ date: d, key, count: counts.get(key) ?? 0 });
-      // Label a column with the month name when its first row starts a new month.
-      if (row === 0 && d.getMonth() !== lastMonth) {
-        lastMonth = d.getMonth();
-        monthLabels.push({ col, label: MONTHS[d.getMonth()] });
-      }
-    }
-    columns.push(colCells);
-  }
-
-  // Streaks.
-  const activeDays = new Set([...counts.entries()].filter(([, c]) => c > 0).map(([k]) => k));
+  // Current streak: consecutive active days ending today (or yesterday, so the
+  // streak doesn't read 0 until a full day has lapsed).
   let currentStreak = 0;
-  for (let d = new Date(today); activeDays.has(ymd(d)); d = new Date(d.getTime() - DAY_MS)) {
+  let cursor = new Date(today);
+  if (!activeDays.has(ymd(cursor))) cursor = new Date(cursor.getTime() - DAY_MS);
+  while (activeDays.has(ymd(cursor))) {
     currentStreak++;
+    cursor = new Date(cursor.getTime() - DAY_MS);
   }
+
+  // Longest streak across all recorded days.
+  const sortedDays = [...activeDays].sort();
   let longestStreak = 0;
   let run = 0;
-  for (let d = new Date(start); d.getTime() <= today.getTime(); d = new Date(d.getTime() + DAY_MS)) {
-    if (activeDays.has(ymd(d))) {
+  let prev: Date | null = null;
+  for (const key of sortedDays) {
+    const d = new Date(key + "T00:00:00");
+    if (prev && d.getTime() - prev.getTime() === DAY_MS) {
       run++;
-      if (run > longestStreak) longestStreak = run;
     } else {
-      run = 0;
+      run = 1;
     }
+    if (run > longestStreak) longestStreak = run;
+    prev = d;
   }
-  const totalDays = activeDays.size;
 
-  const CELL = 13;
-  const GAP = 3;
+  const stats = [
+    { value: currentStreak, label: `day${currentStreak === 1 ? "" : "s"} current`, accent: true },
+    { value: longestStreak, label: "longest streak", accent: false },
+    { value: activeDays.size, label: "active days", accent: false },
+  ];
 
   return (
     <div className="card">
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 10 }}>
-        <h3 className="section-label" style={{ margin: 0 }}>
-          🔥 Study Streak
-        </h3>
-        <div style={{ display: "flex", gap: 18, fontSize: "0.8rem" }}>
-          <span>
-            <strong style={{ color: "var(--primary)" }}>{currentStreak}</strong>
-            <span className="muted"> day{currentStreak === 1 ? "" : "s"} current</span>
-          </span>
-          <span>
-            <strong style={{ color: "var(--text)" }}>{longestStreak}</strong>
-            <span className="muted"> longest</span>
-          </span>
-          <span>
-            <strong style={{ color: "var(--text)" }}>{totalDays}</strong>
-            <span className="muted"> active days</span>
-          </span>
-        </div>
-      </div>
-
-      <div style={{ overflowX: "auto", marginTop: 14, paddingBottom: 4 }}>
-        <div style={{ display: "inline-flex", flexDirection: "column", gap: 4 }}>
-          {/* Month labels */}
-          <div style={{ position: "relative", height: 12, marginLeft: 0 }}>
-            {monthLabels.map((m) => (
-              <span
-                key={`${m.col}-${m.label}`}
-                style={{
-                  position: "absolute",
-                  left: m.col * (CELL + GAP),
-                  fontSize: 10,
-                  color: "var(--text-muted)",
-                }}
-              >
-                {m.label}
-              </span>
-            ))}
-          </div>
-          {/* Heatmap */}
-          <div style={{ display: "flex", gap: GAP }}>
-            {columns.map((colCells, ci) => (
-              <div key={ci} style={{ display: "flex", flexDirection: "column", gap: GAP }}>
-                {colCells.map((cell) => (
-                  <div
-                    key={cell.key}
-                    title={cell.date ? `${cell.key}: ${cell.count} quiz${cell.count === 1 ? "" : "zes"}` : ""}
-                    style={{
-                      width: CELL,
-                      height: CELL,
-                      borderRadius: 3,
-                      background: cell.date ? intensity(cell.count) : "transparent",
-                      border: cell.date ? "1px solid var(--border)" : "none",
-                    }}
-                  />
-                ))}
-              </div>
-            ))}
+      <div style={{ display: "flex", alignItems: "center", gap: 24, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <span style={{ fontSize: "2rem", lineHeight: 1 }}>🔥</span>
+          <div>
+            <div style={{ fontSize: "2rem", fontWeight: 700, color: "var(--primary)", lineHeight: 1 }}>
+              {currentStreak}
+            </div>
+            <div className="stat-label">day{currentStreak === 1 ? "" : "s"} in a row</div>
           </div>
         </div>
+        <div style={{ display: "flex", gap: 28, marginLeft: "auto" }}>
+          {stats.slice(1).map((s) => (
+            <div key={s.label}>
+              <div style={{ fontSize: "1.4rem", fontWeight: 700, color: "var(--text)" }}>{s.value}</div>
+              <div className="stat-label">{s.label}</div>
+            </div>
+          ))}
+        </div>
       </div>
-
-      <p className="method-note" style={{ marginTop: 10 }}>
-        Each square is a day; brighter means more quizzes. Keep the streak alive
-        by taking at least one quiz a day.
+      <p className="method-note" style={{ marginTop: 12 }}>
+        {currentStreak === 0
+          ? "Take a quiz today to start a streak."
+          : "Take at least one quiz a day to keep the streak alive."}
       </p>
     </div>
   );
