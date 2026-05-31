@@ -8,7 +8,11 @@ import { createServiceClient } from "@/lib/supabase/server";
 // it in a Hobby-tier function would exceed the time/memory budget.
 export const maxDuration = 60;
 
-const KANJIDIC_LEVEL: Record<number, string> = { 4: "N5", 3: "N4", 2: "N3", 1: "N2" };
+// Level kanji by Japanese school grade (kyōiku/jōyō), which covers all five
+// JLPT levels including N1. Must match fetch-data.js so the weekly refresh
+// keeps the same distribution. The old 4-level jlptLevel tag is only a fallback.
+const GRADE_LEVEL: Record<number, string> = { 1: "N5", 2: "N4", 3: "N3", 4: "N3", 5: "N2", 6: "N2", 8: "N1" };
+const OLD_JLPT_LEVEL: Record<number, string> = { 4: "N5", 3: "N4", 2: "N3", 1: "N2" };
 
 function katakanaToHiragana(str: string): string {
   return str.replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60));
@@ -16,7 +20,7 @@ function katakanaToHiragana(str: string): string {
 
 interface KdChar {
   literal: string;
-  misc?: { jlptLevel?: number };
+  misc?: { jlptLevel?: number; grade?: number };
   readingMeaning?: {
     groups?: {
       meanings?: { lang: string; value: string }[];
@@ -35,7 +39,7 @@ function processKanjidic(data: { characters: KdChar[] }) {
   }[] = [];
 
   for (const c of data.characters) {
-    const level = KANJIDIC_LEVEL[c.misc?.jlptLevel ?? -1];
+    const level = GRADE_LEVEL[c.misc?.grade ?? -1] ?? OLD_JLPT_LEVEL[c.misc?.jlptLevel ?? -1];
     if (!level) continue;
     const groups = c.readingMeaning?.groups ?? [];
     const meanings = groups

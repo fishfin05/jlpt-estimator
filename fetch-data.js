@@ -93,17 +93,31 @@ function katakanaToHiragana(str) {
 
 // ─── KANJIDIC2 processing ─────────────────────────────────────────────────────
 
-const KANJIDIC_LEVEL = { 4: 'N5', 3: 'N4', 2: 'N3', 1: 'N2' };
+// JLPT no longer publishes an official kanji list, and KANJIDIC2's `jlptLevel`
+// only encodes the OLD pre-2010 4-level system (so it can never yield N1).
+// Instead we map by Japanese school grade (kyōiku/jōyō), which covers all five
+// levels — including N1 — and lines up closely with the commonly cited JLPT
+// kanji counts (~80 / 170 / 370 / 380 / 1000 for N5→N1).
+//   grade 1   → N5   (1st-year kyōiku, ~80 kanji)
+//   grade 2   → N4   (~160)
+//   grade 3-4 → N3   (~400)
+//   grade 5-6 → N2   (~366)
+//   grade 8   → N1   (remaining jōyō / secondary school, ~1100)
+// (There is no grade 7; grades 9-10 are jinmeiyō name kanji, excluded.)
+const GRADE_LEVEL = { 1: 'N5', 2: 'N4', 3: 'N3', 4: 'N3', 5: 'N2', 6: 'N2', 8: 'N1' };
+// Fallback for the rare kanji that carry an old JLPT tag but no grade.
+const OLD_JLPT_LEVEL = { 4: 'N5', 3: 'N4', 2: 'N3', 1: 'N2' };
 
 function processKanjidic(data) {
   const out    = { N5: [], N4: [], N3: [], N2: [], N1: [] };
-  const levMap = new Map(); // char → 'N5'|'N4'|'N3'|'N2' for vocab inference
+  const levMap = new Map(); // char → 'N5'..'N1' for vocab inference
 
   for (const c of data.characters) {
+    const grade = c.misc && c.misc.grade;
     const jlpt  = c.misc && c.misc.jlptLevel;
-    const level = KANJIDIC_LEVEL[jlpt];
+    const level = GRADE_LEVEL[grade] || OLD_JLPT_LEVEL[jlpt];
 
-    // Always register every kanji that has a JLPT level in the lookup map
+    // Always register every leveled kanji in the lookup map (for vocab inference)
     if (level) levMap.set(c.literal, level);
 
     if (!level) continue;
@@ -168,13 +182,18 @@ function inferLevel(word, levMap) {
   return isCommon ? 'N4' : null;
 }
 
+// Per-level caps that roughly track the real JLPT vocab distribution
+// (more words at higher levels) instead of a flat number. The most useful
+// (JMdict-"common") words are kept first, so each level's pool is the highest-
+// frequency vocabulary available at that difficulty.
+const LEVEL_CAP = { N5: 1500, N4: 2500, N3: 5000, N2: 7000, N1: 10000 };
+
 function processJmdict(data, levMap) {
   const buckets = { N5: [], N4: [], N3: [], N2: [], N1: [] };
-  const MAX_PER_LEVEL = 4000; // cap so the file stays manageable
 
   for (const word of data.words) {
     const level = inferLevel(word, levMap);
-    if (!level || buckets[level].length >= MAX_PER_LEVEL) continue;
+    if (!level) continue;
 
     const kanaEntry  = (word.kana  || [])[0];
     const kanjiEntry = (word.kanji || [])[0];
@@ -192,7 +211,17 @@ function processJmdict(data, levMap) {
 
     if (!meanings.length) continue;
 
-    buckets[level].push({ word: wordText, reading, meanings });
+    const isCommon = !!(kanaEntry.common || (kanjiEntry && kanjiEntry.common));
+    buckets[level].push({ word: wordText, reading, meanings, _common: isCommon });
+  }
+
+  // Keep common words first, then cap each level.
+  for (const l of LEVEL_ORDER) {
+    buckets[l].sort((a, b) => (b._common ? 1 : 0) - (a._common ? 1 : 0));
+    buckets[l] = buckets[l]
+      .slice(0, LEVEL_CAP[l])
+      // eslint-disable-next-line no-unused-vars
+      .map(({ _common, ...rest }) => rest);
   }
 
   return buckets;
