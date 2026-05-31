@@ -8,34 +8,58 @@ function LoginForm() {
   const params = useSearchParams();
   const next = params.get("next") || "/";
   const authError = params.get("error");
+
+  const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
-  const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">(authError ? "error" : "idle");
+  const [password, setPassword] = useState("");
+  const [status, setStatus] = useState<"idle" | "working" | "error" | "info">(
+    authError ? "error" : "idle",
+  );
   const [message, setMessage] = useState(
-    authError ? `${decodeURIComponent(authError)} — request a fresh link below (each link works only once).` : "",
+    authError ? decodeURIComponent(authError) : "",
   );
 
-  async function sendLink(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!email.trim()) return;
-    setStatus("sending");
+    if (!email.trim() || !password) return;
+    setStatus("working");
+    setMessage("");
     const supabase = createClient();
     const siteUrl =
       process.env.NEXT_PUBLIC_SITE_URL ||
       (typeof window !== "undefined" ? window.location.origin : "");
 
-    const { error } = await supabase.auth.signInWithOtp({
-      email: email.trim(),
-      options: {
-        emailRedirectTo: `${siteUrl}/auth/callback?next=${encodeURIComponent(next)}`,
-      },
-    });
-
-    if (error) {
-      setStatus("error");
-      setMessage(error.message);
+    if (mode === "signin") {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+      if (error) {
+        setStatus("error");
+        setMessage(error.message);
+      } else {
+        // Full navigation so the server picks up the new session cookie.
+        window.location.assign(next);
+      }
     } else {
-      setStatus("sent");
-      setMessage("Check your email for a sign-in link. You can close this tab after clicking it.");
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+        options: {
+          emailRedirectTo: `${siteUrl}/auth/callback?next=${encodeURIComponent(next)}`,
+        },
+      });
+      if (error) {
+        setStatus("error");
+        setMessage(error.message);
+      } else if (data.session) {
+        // Email confirmation disabled → signed in immediately.
+        window.location.assign(next);
+      } else {
+        // Email confirmation enabled → must confirm via email first.
+        setStatus("info");
+        setMessage("Account created. Check your email to confirm, then sign in.");
+      }
     }
   }
 
@@ -44,10 +68,12 @@ function LoginForm() {
       <div className="auth-card">
         <div className="logo-area">
           <h1>日本語レベル測定</h1>
-          <p className="tagline">Sign in to track your progress</p>
+          <p className="tagline">
+            {mode === "signin" ? "Sign in to track your progress" : "Create an account"}
+          </p>
         </div>
 
-        <form onSubmit={sendLink} className="card" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <form onSubmit={submit} className="card" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <input
             type="email"
             placeholder="you@example.com"
@@ -56,17 +82,47 @@ function LoginForm() {
             autoComplete="email"
             required
           />
-          <button className="primary-btn" type="submit" disabled={status === "sending"}>
-            {status === "sending" ? "Sending…" : "Send magic link"}
+          <input
+            type="password"
+            placeholder="Password (min 6 characters)"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete={mode === "signin" ? "current-password" : "new-password"}
+            minLength={6}
+            required
+          />
+          <button className="primary-btn" type="submit" disabled={status === "working"}>
+            {status === "working"
+              ? "Please wait…"
+              : mode === "signin"
+                ? "Sign in"
+                : "Create account"}
           </button>
           {message && (
             <div className={`auth-msg ${status === "error" ? "error" : "success"}`}>{message}</div>
           )}
         </form>
 
-        <p className="slider-hint" style={{ textAlign: "center" }}>
-          No password needed — we email you a one-click sign-in link.
-        </p>
+        <button
+          type="button"
+          onClick={() => {
+            setMode((m) => (m === "signin" ? "signup" : "signin"));
+            setStatus("idle");
+            setMessage("");
+          }}
+          style={{
+            background: "none",
+            border: "none",
+            color: "var(--text-muted)",
+            cursor: "pointer",
+            fontSize: "0.85rem",
+            fontFamily: "inherit",
+          }}
+        >
+          {mode === "signin"
+            ? "No account? Create one →"
+            : "← Already have an account? Sign in"}
+        </button>
       </div>
     </div>
   );
