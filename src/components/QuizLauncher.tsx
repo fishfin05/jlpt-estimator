@@ -16,12 +16,7 @@ export default function QuizLauncher({ loggedIn }: { loggedIn: boolean }) {
   const [count, setCount] = useState(30);
 
   function start() {
-    const target = `/quiz?mode=${mode}&count=${count}`;
-    if (!loggedIn) {
-      router.push(`/login?next=${encodeURIComponent(target)}`);
-    } else {
-      router.push(target);
-    }
+    router.push(`/quiz?mode=${mode}&count=${count}`);
   }
 
   return (
@@ -75,8 +70,13 @@ export default function QuizLauncher({ loggedIn }: { loggedIn: boolean }) {
       </div>
 
       <button className="primary-btn" onClick={start} type="button">
-        {loggedIn ? "Start Quiz" : "Sign in & Start"}
+        Start Quiz
       </button>
+      {!loggedIn && (
+        <p className="slider-hint" style={{ textAlign: "center", marginTop: 0 }}>
+          No account needed to try — sign in afterward to save your results.
+        </p>
+      )}
     </div>
   );
 }

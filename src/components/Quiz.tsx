@@ -32,10 +32,12 @@ export default function Quiz({
   dictionary,
   mode,
   totalQuestions,
+  loggedIn,
 }: {
   dictionary: Dictionary;
   mode: Mode;
   totalQuestions: number;
+  loggedIn: boolean;
 }) {
   const router = useRouter();
   const engineRef = useRef<QuizEngine | null>(null);
@@ -50,7 +52,7 @@ export default function Quiz({
   const [challenged, setChallenged] = useState(false);
   const [results, setResults] = useState<ResultsSummary | null>(null);
   const [barsReady, setBarsReady] = useState(false);
-  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error" | "guest">("idle");
   const savedSessionId = useRef<string | null>(null);
 
   const meaningRef = useRef<HTMLInputElement>(null);
@@ -78,7 +80,6 @@ export default function Quiz({
 
   // ── Persistence ─────────────────────────────────────────
   const persist = useCallback(async (engine: QuizEngine, res: ResultsSummary) => {
-    setSaveState("saving");
     const levelsSnapshot: Record<string, unknown> = {};
     for (const l of LEVELS) {
       const r = res.levelResults[l];
@@ -103,12 +104,29 @@ export default function Quiz({
       challenged: a.challenged,
     }));
 
-    const out = await saveSession({
+    const payload = {
       mode,
       totalQuestions: engine.currentQuestion,
       result: res.overallLevel,
       levels: levelsSnapshot,
       attempts,
+    };
+
+    // Guests: stash the result locally and prompt them to sign in. After they
+    // log in, PendingResultSaver flushes it to their account automatically.
+    if (!loggedIn) {
+      try {
+        localStorage.setItem("pendingQuizResult", JSON.stringify(payload));
+      } catch {
+        // ignore storage failures (private mode, etc.)
+      }
+      setSaveState("guest");
+      return;
+    }
+
+    setSaveState("saving");
+    const out = await saveSession({
+      ...payload,
       replaceSessionId: savedSessionId.current ?? undefined,
     });
     if (out.ok) {
@@ -117,7 +135,7 @@ export default function Quiz({
     } else {
       setSaveState("error");
     }
-  }, [mode]);
+  }, [mode, loggedIn]);
 
   const finish = useCallback(() => {
     const engine = engineRef.current!;
@@ -266,6 +284,7 @@ export default function Quiz({
         engine={engineRef.current!}
         barsReady={barsReady}
         saveState={saveState}
+        loggedIn={loggedIn}
         onExtend={handleExtend}
         onRestart={() => router.push("/")}
       />
@@ -437,6 +456,7 @@ function ResultsView({
   engine,
   barsReady,
   saveState,
+  loggedIn,
   onExtend,
   onRestart,
 }: {
@@ -444,7 +464,8 @@ function ResultsView({
   mode: Mode;
   engine: QuizEngine;
   barsReady: boolean;
-  saveState: "idle" | "saving" | "saved" | "error";
+  saveState: "idle" | "saving" | "saved" | "error" | "guest";
+  loggedIn: boolean;
   onExtend: () => void;
   onRestart: () => void;
 }) {
@@ -476,6 +497,24 @@ function ResultsView({
             {saveState === "error" && "⚠ Could not save this session"}
           </div>
         </div>
+
+        {!loggedIn && (
+          <div className="card" style={{ borderColor: "var(--primary)", background: "var(--primary-light)" }}>
+            <h3 className="section-label" style={{ color: "var(--text)" }}>Save your progress</h3>
+            <p className="method-note" style={{ marginTop: 0 }}>
+              Create a free account to save this result and track your level,
+              streaks, and weak spots over time. Your result from this quiz is
+              waiting — it&apos;ll be saved automatically the moment you sign in.
+            </p>
+            <a
+              href="/login?next=/dashboard"
+              className="primary-btn"
+              style={{ textAlign: "center", marginTop: 4 }}
+            >
+              Create a free account to save →
+            </a>
+          </div>
+        )}
 
         <div className="card">
           <h3 className="section-label">Breakdown by JLPT Level</h3>

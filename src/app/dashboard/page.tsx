@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import TopNav from "@/components/TopNav";
 import ProgressChart, { type SessionPoint } from "@/components/ProgressChart";
 import StreakCalendar from "@/components/StreakCalendar";
+import PendingResultSaver from "@/components/PendingResultSaver";
 import { buildProficiency, type KillListEntry } from "@/lib/proficiency";
 import { LEVELS } from "@/lib/types";
 
@@ -188,6 +189,9 @@ export default async function DashboardPage() {
       <main className="page-results">
         <div className="dash-inner">
           <h2 style={{ fontSize: "1.5rem", fontWeight: 700, textAlign: "center" }}>Your Progress</h2>
+
+          <PendingResultSaver />
+
 
           {!hasData ? (
             <div className="card">

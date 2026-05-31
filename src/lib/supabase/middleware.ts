@@ -60,8 +60,10 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Routes that require a logged-in user.
-  const protectedPrefixes = ["/quiz", "/dashboard"];
+  // Routes that require a logged-in user. /quiz is intentionally public so
+  // anyone can try the quiz without an account (they're prompted to sign in
+  // afterward to save their results).
+  const protectedPrefixes = ["/dashboard"];
   const isProtected = protectedPrefixes.some((p) => pathname.startsWith(p));
 
   if (isProtected && !user) {

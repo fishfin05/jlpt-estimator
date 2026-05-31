@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
 import { loadDictionary, dictionaryIsSeeded } from "@/lib/dictionary";
+import { createClient } from "@/lib/supabase/server";
 import type { Mode } from "@/lib/types";
 import Quiz from "@/components/Quiz";
 import Link from "next/link";
@@ -48,5 +48,10 @@ export default async function QuizPage({
 
   const dictionary = await loadDictionary(mode);
 
-  return <Quiz dictionary={dictionary} mode={mode} totalQuestions={count} />;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  return <Quiz dictionary={dictionary} mode={mode} totalQuestions={count} loggedIn={!!user} />;
 }
