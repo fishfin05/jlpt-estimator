@@ -3,6 +3,7 @@
 import { useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { signUpAction } from "@/lib/actions/auth";
 
 function LoginForm() {
   const params = useSearchParams();
@@ -24,12 +25,8 @@ function LoginForm() {
     if (!email.trim() || !password) return;
     setStatus("working");
     setMessage("");
-    const supabase = createClient();
-    const siteUrl =
-      process.env.NEXT_PUBLIC_SITE_URL ||
-      (typeof window !== "undefined" ? window.location.origin : "");
-
     if (mode === "signin") {
+      const supabase = createClient();
       const { error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
@@ -42,23 +39,15 @@ function LoginForm() {
         window.location.assign(next);
       }
     } else {
-      const { data, error } = await supabase.auth.signUp({
-        email: email.trim(),
-        password,
-        options: {
-          emailRedirectTo: `${siteUrl}/auth/callback?next=${encodeURIComponent(next)}`,
-        },
-      });
-      if (error) {
+      // Sign-up creates an already-confirmed account server-side and signs in
+      // immediately — no confirmation email needed.
+      const result = await signUpAction(email.trim(), password);
+      if (!result.ok) {
         setStatus("error");
-        setMessage(error.message);
-      } else if (data.session) {
-        // Email confirmation disabled → signed in immediately.
-        window.location.assign(next);
+        setMessage(result.error);
       } else {
-        // Email confirmation enabled → must confirm via email first.
-        setStatus("info");
-        setMessage("Account created. Check your email to confirm, then sign in.");
+        // The session cookie was set on the server; reload so it's picked up.
+        window.location.assign(next);
       }
     }
   }
