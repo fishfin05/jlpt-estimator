@@ -360,7 +360,7 @@ kbd {
 /* =============================================
    Dashboard
    ============================================= */
-.dash-inner { width: 100%; max-width: 1080px; display: flex; flex-direction: column; gap: 16px; }
+.dash-inner { width: 100%; max-width: 1600px; display: flex; flex-direction: column; gap: 16px; }
 .dash-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
 /* Two-up rows on wide screens so the dashboard fills the space. */
 .dash-cols { display: grid; grid-template-columns: 1fr; gap: 16px; }

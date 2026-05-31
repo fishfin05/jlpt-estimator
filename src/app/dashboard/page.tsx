@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import TopNav from "@/components/TopNav";
 import ProgressChart, { type SessionPoint } from "@/components/ProgressChart";
+import StreakCalendar from "@/components/StreakCalendar";
 import { LEVELS } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -74,6 +75,14 @@ export default async function DashboardPage() {
     }));
   const recentSessions = sessionRows.slice(0, 15);
 
+  // All session dates (lightweight) for the streak calendar.
+  const { data: sessionDates } = await supabase
+    .from("sessions")
+    .select("created_at")
+    .order("created_at", { ascending: true })
+    .limit(2000);
+  const allDates = (sessionDates ?? []).map((s) => s.created_at as string);
+
   // Recent attempts for aggregation (bounded for performance)
   const { data: attempts } = await supabase
     .from("attempts")
@@ -113,13 +122,15 @@ export default async function DashboardPage() {
   }
   const killList = [...itemStats.values()]
     .filter((s) => s.missed > 0)
+    // "Most wanted": worst offenders first (most missed), then most seen.
     .sort(
       (a, b) =>
-        LEVELS.indexOf(a.level as (typeof LEVELS)[number]) -
-          LEVELS.indexOf(b.level as (typeof LEVELS)[number]) ||
         b.missed - a.missed ||
-        b.seen - a.seen,
-    );
+        b.seen - a.seen ||
+        LEVELS.indexOf(a.level as (typeof LEVELS)[number]) -
+          LEVELS.indexOf(b.level as (typeof LEVELS)[number]),
+    )
+    .slice(0, 10);
 
   const overallTotal = rows.length;
   const overallCorrect = rows.filter((a) => a.correct).length;
@@ -161,6 +172,8 @@ export default async function DashboardPage() {
                 </div>
               </div>
 
+              <StreakCalendar dates={allDates} />
+
               <ProgressChart points={chartPoints} />
 
               <div className="dash-cols">
@@ -193,13 +206,14 @@ export default async function DashboardPage() {
               </div>
 
               <div className="card">
-                <h3 className="section-label">🎯 Kill List — missed items, N5 → N1</h3>
+                <h3 className="section-label">🔫 Kill List — Top 10 Most Wanted</h3>
                 {killList.length === 0 ? (
-                  <p className="empty-hint">Nothing missed yet — nice.</p>
+                  <p className="empty-hint">No outlaws yet — you haven&apos;t missed anything.</p>
                 ) : (
                   <table className="table">
                     <thead>
                       <tr>
+                        <th>#</th>
                         <th>Item</th>
                         <th>Type</th>
                         <th>Level</th>
@@ -208,8 +222,9 @@ export default async function DashboardPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {killList.map((s) => (
+                      {killList.map((s, i) => (
                         <tr key={`${s.type}:${s.item}`}>
+                          <td className="muted" style={{ fontWeight: 700 }}>{i + 1}</td>
                           <td style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: "1.1rem" }}>{s.item}</td>
                           <td className="muted">{s.type}</td>
                           <td><span className={`level-tag ${s.level}`}>{s.level}</span></td>

@@ -53,6 +53,19 @@ export default function ProgressChart({ points }: { points: SessionPoint[] }) {
     .map((d, k) => `${k === 0 ? "M" : "L"} ${xAt(d.i).toFixed(1)} ${yAt(d.v).toFixed(1)}`)
     .join(" ");
 
+  // Trailing moving-average trend line (smooths out noisy quiz-to-quiz swings).
+  const MA_WINDOW = 3;
+  const maPath =
+    drawn.length >= MA_WINDOW
+      ? drawn
+          .map((d, k) => {
+            const slice = drawn.slice(Math.max(0, k - MA_WINDOW + 1), k + 1);
+            const avg = slice.reduce((s, x) => s + x.v, 0) / slice.length;
+            return `${k === 0 ? "M" : "L"} ${xAt(d.i).toFixed(1)} ${yAt(avg).toFixed(1)}`;
+          })
+          .join(" ")
+      : "";
+
   const fmtDate = (iso: string) =>
     new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
@@ -131,6 +144,18 @@ export default function ProgressChart({ points }: { points: SessionPoint[] }) {
           );
         })}
 
+        {/* Moving-average trend line (drawn under the raw line) */}
+        {maPath && (
+          <path
+            d={maPath}
+            fill="none"
+            stroke="var(--warning, #f59e0b)"
+            strokeWidth={2}
+            strokeDasharray="5 4"
+            opacity={0.9}
+          />
+        )}
+
         {/* The line */}
         {linePath && (
           <path d={linePath} fill="none" stroke="var(--primary, #6c8cff)" strokeWidth={2.5} />
@@ -174,10 +199,17 @@ export default function ProgressChart({ points }: { points: SessionPoint[] }) {
         ))}
       </svg>
 
-      <p className="method-note" style={{ marginTop: 4 }}>
-        {isLevel
-          ? "Your estimated JLPT level for each quiz, oldest to newest."
-          : "Overall accuracy (correct answers ÷ total) for each quiz, oldest to newest."}
+      <p className="method-note" style={{ marginTop: 4, display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center" }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <span style={{ width: 16, height: 2.5, background: "var(--primary)", display: "inline-block" }} />
+          {isLevel ? "Level per quiz" : "Accuracy per quiz"}
+        </span>
+        {maPath && (
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <span style={{ width: 16, height: 0, borderTop: "2px dashed var(--warning)", display: "inline-block" }} />
+            {MA_WINDOW}-quiz trend
+          </span>
+        )}
       </p>
     </div>
   );
