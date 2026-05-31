@@ -22,6 +22,10 @@ export interface SessionPayload {
   result: string;
   levels: Record<string, unknown>;
   attempts: AttemptPayload[];
+  // When set, this is a continuation of an earlier-saved session (e.g. after
+  // "+10 more questions"). The previous session row is replaced so the run
+  // shows up as a single session rather than two.
+  replaceSessionId?: string;
 }
 
 export async function saveSession(
@@ -33,6 +37,16 @@ export async function saveSession(
   } = await supabase.auth.getUser();
 
   if (!user) return { ok: false, error: "Not signed in." };
+
+  // If this run continues a previously-saved session, remove the old row first
+  // (its attempts cascade-delete) so we re-insert one combined session.
+  if (payload.replaceSessionId) {
+    await supabase
+      .from("sessions")
+      .delete()
+      .eq("id", payload.replaceSessionId)
+      .eq("user_id", user.id);
+  }
 
   const { data: session, error: sessionError } = await supabase
     .from("sessions")

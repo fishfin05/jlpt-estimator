@@ -42,3 +42,5 @@ yarn-error.log*
 # Comment these out if you prefer to commit the JSON snapshots:
 # /data/kanji.json
 # /data/vocab.json
+
+.vercel

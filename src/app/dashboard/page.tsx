@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import TopNav from "@/components/TopNav";
-import { LEVELS, type Level } from "@/lib/types";
+import ProgressChart, { type SessionPoint } from "@/components/ProgressChart";
+import { LEVELS } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,27 @@ interface SessionRow {
   mode: string;
   total_questions: number;
   result: string;
+  levels: Record<string, { correct?: number; total?: number }> | null;
+}
+
+const LEVEL_NUM: Record<string, number> = {
+  "Below N5": 0,
+  N5: 1,
+  N4: 2,
+  N3: 3,
+  N2: 4,
+  N1: 5,
+};
+
+function sessionAccuracy(levels: SessionRow["levels"]): number | null {
+  if (!levels) return null;
+  let correct = 0;
+  let total = 0;
+  for (const v of Object.values(levels)) {
+    correct += v?.correct ?? 0;
+    total += v?.total ?? 0;
+  }
+  return total > 0 ? Math.round((correct / total) * 100) : null;
 }
 
 export default async function DashboardPage() {
@@ -33,12 +55,24 @@ export default async function DashboardPage() {
     supabase.from("attempts").select("*", { count: "exact", head: true }),
   ]);
 
-  // Recent sessions
+  // Sessions (newest first). Used for the recent-sessions table and, reversed,
+  // for the progress-over-time chart.
   const { data: sessions } = await supabase
     .from("sessions")
-    .select("created_at, mode, total_questions, result")
+    .select("created_at, mode, total_questions, result, levels")
     .order("created_at", { ascending: false })
-    .limit(15);
+    .limit(100);
+
+  const sessionRows = (sessions ?? []) as SessionRow[];
+  const chartPoints: SessionPoint[] = [...sessionRows]
+    .reverse()
+    .map((s) => ({
+      date: s.created_at,
+      level: s.result,
+      levelNum: LEVEL_NUM[s.result] ?? 0,
+      accuracy: sessionAccuracy(s.levels),
+    }));
+  const recentSessions = sessionRows.slice(0, 15);
 
   // Recent attempts for aggregation (bounded for performance)
   const { data: attempts } = await supabase
@@ -57,29 +91,6 @@ export default async function DashboardPage() {
     perLevel[a.level].total++;
     if (a.correct) perLevel[a.level].correct++;
   }
-
-  // Weakest items: group by item+type, rank by miss count (seen >= 2)
-  const itemStats = new Map<
-    string,
-    { item: string; type: string; level: string; seen: number; missed: number }
-  >();
-  for (const a of rows) {
-    const key = `${a.item_type}:${a.item}`;
-    const s = itemStats.get(key) ?? {
-      item: a.item,
-      type: a.item_type,
-      level: a.level,
-      seen: 0,
-      missed: 0,
-    };
-    s.seen++;
-    if (!a.correct) s.missed++;
-    itemStats.set(key, s);
-  }
-  const weakest = [...itemStats.values()]
-    .filter((s) => s.missed > 0)
-    .sort((a, b) => b.missed - a.missed || b.seen - a.seen)
-    .slice(0, 12);
 
   const overallTotal = rows.length;
   const overallCorrect = rows.filter((a) => a.correct).length;
@@ -116,10 +127,12 @@ export default async function DashboardPage() {
                   <div className="stat-label">Recent accuracy</div>
                 </div>
                 <div className="stat-card">
-                  <div className="stat-value">{sessions?.[0]?.result ?? "—"}</div>
+                  <div className="stat-value">{recentSessions[0]?.result ?? "—"}</div>
                   <div className="stat-label">Latest level</div>
                 </div>
               </div>
+
+              <ProgressChart points={chartPoints} />
 
               <div className="card">
                 <h3 className="section-label">Accuracy by Level (recent {overallTotal} answers)</h3>
@@ -150,36 +163,6 @@ export default async function DashboardPage() {
               </div>
 
               <div className="card">
-                <h3 className="section-label">Words & Kanji You Miss Most</h3>
-                {weakest.length === 0 ? (
-                  <p className="empty-hint">Nothing missed yet — nice.</p>
-                ) : (
-                  <table className="table">
-                    <thead>
-                      <tr>
-                        <th>Item</th>
-                        <th>Type</th>
-                        <th>Level</th>
-                        <th>Missed</th>
-                        <th>Seen</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {weakest.map((s) => (
-                        <tr key={`${s.type}:${s.item}`}>
-                          <td style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: "1.1rem" }}>{s.item}</td>
-                          <td className="muted">{s.type}</td>
-                          <td><span className={`level-tag ${s.level}`}>{s.level}</span></td>
-                          <td className="badge-wrong">{s.missed}</td>
-                          <td className="muted">{s.seen}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-
-              <div className="card">
                 <h3 className="section-label">Recent Sessions</h3>
                 <table className="table">
                   <thead>
@@ -191,7 +174,7 @@ export default async function DashboardPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {(sessions as SessionRow[] | null)?.map((s, i) => (
+                    {recentSessions.map((s, i) => (
                       <tr key={i}>
                         <td className="muted">{new Date(s.created_at).toLocaleString()}</td>
                         <td>{s.mode}</td>
@@ -201,6 +184,22 @@ export default async function DashboardPage() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+
+              <div className="card">
+                <h3 className="section-label">Export Your Data</h3>
+                <p className="method-note" style={{ marginTop: 0 }}>
+                  Download your full history — every session and every answer
+                  (item, level, meaning/reading given, passed/missed, dates).
+                </p>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <a href="/api/export" className="secondary-btn" download>
+                    Download JSON (complete)
+                  </a>
+                  <a href="/api/export?format=csv" className="secondary-btn" download>
+                    Download CSV (spreadsheet)
+                  </a>
+                </div>
               </div>
             </>
           )}

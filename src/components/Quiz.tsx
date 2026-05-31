@@ -51,6 +51,7 @@ export default function Quiz({
   const [results, setResults] = useState<ResultsSummary | null>(null);
   const [barsReady, setBarsReady] = useState(false);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const savedSessionId = useRef<string | null>(null);
 
   const meaningRef = useRef<HTMLInputElement>(null);
   const readingRef = useRef<HTMLInputElement>(null);
@@ -108,8 +109,14 @@ export default function Quiz({
       result: res.overallLevel,
       levels: levelsSnapshot,
       attempts,
+      replaceSessionId: savedSessionId.current ?? undefined,
     });
-    setSaveState(out.ok ? "saved" : "error");
+    if (out.ok) {
+      savedSessionId.current = out.sessionId;
+      setSaveState("saved");
+    } else {
+      setSaveState("error");
+    }
   }, [mode]);
 
   const finish = useCallback(() => {
@@ -531,7 +538,7 @@ function ResultsView({
             </button>
           )}
           <button className="primary-btn" onClick={onRestart} type="button">
-            Start Over
+            New Quiz
           </button>
         </div>
       </div>
