@@ -1,0 +1,66 @@
+"use server";
+
+import { createClient } from "@/lib/supabase/server";
+import type { Mode } from "@/lib/types";
+
+export interface AttemptPayload {
+  item_type: "kanji" | "vocab";
+  item: string;
+  level: string;
+  meaning_given: string;
+  reading_given: string;
+  meaning_correct: boolean;
+  reading_correct: boolean;
+  correct: boolean;
+  skipped: boolean;
+  challenged: boolean;
+}
+
+export interface SessionPayload {
+  mode: Mode;
+  totalQuestions: number;
+  result: string;
+  levels: Record<string, unknown>;
+  attempts: AttemptPayload[];
+}
+
+export async function saveSession(
+  payload: SessionPayload,
+): Promise<{ ok: true; sessionId: string } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const { data: session, error: sessionError } = await supabase
+    .from("sessions")
+    .insert({
+      user_id: user.id,
+      mode: payload.mode,
+      total_questions: payload.totalQuestions,
+      result: payload.result,
+      levels: payload.levels,
+    })
+    .select("id")
+    .single();
+
+  if (sessionError || !session) {
+    return { ok: false, error: sessionError?.message ?? "Could not save session." };
+  }
+
+  if (payload.attempts.length > 0) {
+    const rows = payload.attempts.map((a) => ({
+      session_id: session.id,
+      user_id: user.id,
+      ...a,
+    }));
+    const { error: attemptsError } = await supabase.from("attempts").insert(rows);
+    if (attemptsError) {
+      return { ok: false, error: attemptsError.message };
+    }
+  }
+
+  return { ok: true, sessionId: session.id as string };
+}

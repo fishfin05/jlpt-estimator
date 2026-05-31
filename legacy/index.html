@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Japanese Level Estimator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- HOME SCREEN -->
+  <div id="screen-home" class="screen active">
+    <div class="home-inner">
+      <div class="logo-area">
+        <h1>日本語レベル測定</h1>
+        <p class="tagline">Japanese Level Estimator</p>
+      </div>
+
+      <div class="card">
+        <h2 class="section-label">Quiz Mode</h2>
+        <div class="mode-buttons">
+          <button class="mode-btn active" data-mode="kanji">
+            <span class="mode-icon">漢</span>
+            <span class="mode-label">Kanji</span>
+          </button>
+          <button class="mode-btn" data-mode="vocab">
+            <span class="mode-icon">語</span>
+            <span class="mode-label">Vocabulary</span>
+          </button>
+          <button class="mode-btn" data-mode="both">
+            <span class="mode-icon">両</span>
+            <span class="mode-label">Both</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 class="section-label">Questions</h2>
+        <div class="slider-row">
+          <input type="range" id="q-count" min="10" max="100" value="30" step="5">
+          <span id="q-count-display" class="count-display">30</span>
+        </div>
+        <p class="slider-hint">More questions = higher accuracy. 30 is a good default.</p>
+      </div>
+
+      <div class="card methodology-card">
+        <h2 class="section-label">How it works</h2>
+        <ul class="method-list">
+          <li>Questions are drawn <strong>adaptively</strong> — the quiz focuses on your boundary level, not just one fixed level.</li>
+          <li>It builds a <strong>probability estimate</strong> across all JLPT levels (N5–N1) as you answer.</li>
+          <li>Early answers seed the estimate; confidence grows as more data comes in.</li>
+          <li>Type both the <strong>meaning</strong> and the <strong>reading</strong>. The reading field converts romaji to hiragana live as you type (like WaniKani) — or paste kana directly.</li>
+          <li><strong>Knowing</strong> a kanji = giving a correct meaning + at least one reading (on'yomi or kun'yomi).<br>
+              <strong>Knowing</strong> a word = giving a correct meaning + the reading.</li>
+        </ul>
+      </div>
+
+      <button id="start-btn" class="primary-btn">Start Quiz</button>
+    </div>
+  </div>
+
+  <!-- QUIZ SCREEN -->
+  <div id="screen-quiz" class="screen">
+    <div class="quiz-header">
+      <button id="home-btn" class="home-btn" title="Back to home">&#8592; Home</button>
+      <div class="progress-wrap">
+        <div class="progress-bar"><div id="progress-fill"></div></div>
+        <span id="q-number">1 / 30</span>
+      </div>
+      <span id="level-badge" class="level-badge">N3</span>
+    </div>
+
+    <div class="question-area">
+      <div id="item-type-label" class="item-type-label">Kanji</div>
+      <div id="question-display" class="question-display"></div>
+    </div>
+
+    <div id="input-section" class="input-section">
+      <div class="input-group">
+        <label for="meaning-input">Meaning</label>
+        <input type="text" id="meaning-input" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="e.g. day, sun">
+      </div>
+      <div class="input-group">
+        <label for="reading-input">Reading</label>
+        <input type="text" id="reading-input" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="romaji converts live: nichi → にち">
+      </div>
+      <button id="submit-btn" class="primary-btn">Submit <kbd>Enter</kbd></button>
+    </div>
+
+    <div id="feedback-section" class="feedback-section hidden">
+      <div id="feedback-result" class="feedback-result"></div>
+
+      <div class="answer-details">
+        <div class="answer-row">
+          <span class="answer-label">Your meaning:</span>
+          <span id="user-meaning-display" class="user-answer"></span>
+          <span id="meaning-verdict" class="verdict"></span>
+        </div>
+        <div class="answer-row">
+          <span class="answer-label">Your reading:</span>
+          <span id="user-reading-display" class="user-answer"></span>
+          <span id="reading-verdict" class="verdict"></span>
+        </div>
+        <div class="accepted-wrap">
+          <span class="answer-label">Accepted meanings:</span>
+          <span id="accepted-meanings" class="accepted-list"></span>
+        </div>
+        <div class="accepted-wrap">
+          <span class="answer-label">Accepted readings:</span>
+          <span id="accepted-readings" class="accepted-list"></span>
+        </div>
+      </div>
+
+      <div class="feedback-actions">
+        <button id="challenge-btn" class="secondary-btn hidden">Challenge — I got it right</button>
+        <button id="next-btn" class="primary-btn">Next <kbd>Enter</kbd></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- RESULTS SCREEN -->
+  <div id="screen-results" class="screen">
+    <div class="results-inner">
+      <h2>Your Results</h2>
+
+      <div id="overall-level-card" class="card overall-card">
+        <div class="overall-label">Estimated Level</div>
+        <div id="overall-level-display" class="overall-level-value"></div>
+        <div id="overall-note" class="overall-note"></div>
+      </div>
+
+      <div class="card">
+        <h3 class="section-label">Breakdown by JLPT Level</h3>
+        <div id="level-breakdown" class="level-breakdown"></div>
+      </div>
+
+      <div class="card">
+        <h3 class="section-label">Methodology Note</h3>
+        <p id="methodology-note" class="method-note"></p>
+        <p class="method-note">Results marked <span class="low-confidence">low confidence</span> are based on fewer than 5 questions at that level — extend the quiz for better accuracy.</p>
+      </div>
+
+      <div class="results-actions">
+        <button id="extend-btn" class="secondary-btn">+10 More Questions</button>
+        <button id="restart-btn" class="primary-btn">Start Over</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
