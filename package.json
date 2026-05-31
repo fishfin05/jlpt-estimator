@@ -10,7 +10,8 @@
     "lint": "next lint",
     "seed": "node scripts/seed-dictionary.mjs",
     "simulate": "node simulate.js",
-    "fetch-data": "node fetch-data.js"
+    "fetch-data": "node fetch-data.js",
+    "test": "tsx test/run-tests.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",
@@ -27,6 +28,7 @@
     "@types/react-dom": "^19.0.0",
     "dotenv": "^16.4.7",
     "tailwindcss": "^4.0.0",
+    "tsx": "^4.22.4",
     "typescript": "^5.7.0"
   }
 }
