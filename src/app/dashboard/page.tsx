@@ -15,9 +15,11 @@ interface AttemptRow {
   correct: boolean;
   skipped: boolean;
   created_at: string;
+  session_id: string;
 }
 
 interface SessionRow {
+  id: string;
   created_at: string;
   mode: string;
   total_questions: number;
@@ -54,6 +56,42 @@ function sessionAccuracy(levels: SessionRow["levels"]): number | null {
   return total > 0 ? Math.round((correct / total) * 100) : null;
 }
 
+// Continuous ability score on a 0–5 scale (0 = below N5, 5 = N1), computed as
+// the sum of per-level accuracy = "how many levels you've effectively mastered".
+// This gives the graph real fluctuation: a steady-N4 user who answers 75% vs
+// 85% at N4 plots at slightly different heights instead of a flat integer.
+function continuousLevel(levels: SessionRow["levels"]): number | null {
+  if (!levels) return null;
+  const acc: (number | null)[] = LEVELS.map((l) => {
+    const v = levels[l];
+    if (!v || !v.total) return null;
+    return (v.correct ?? 0) / v.total;
+  });
+  const tested = acc.map((a, i) => (a !== null ? i : -1)).filter((i) => i >= 0);
+  if (tested.length === 0) return null;
+  const first = tested[0];
+  const last = tested[tested.length - 1];
+  let sum = 0;
+  for (let i = 0; i < LEVELS.length; i++) {
+    if (acc[i] !== null) {
+      sum += acc[i] as number;
+    } else if (i < first) {
+      sum += 1; // below the tested band → assume mastered
+    } else if (i > last) {
+      sum += 0; // above the tested band → assume unknown
+    } else {
+      // gap inside the tested band → interpolate between nearest neighbours
+      let lo = i;
+      let hi = i;
+      while (acc[lo] === null) lo--;
+      while (acc[hi] === null) hi++;
+      const t = (i - lo) / (hi - lo);
+      sum += (acc[lo] as number) * (1 - t) + (acc[hi] as number) * t;
+    }
+  }
+  return sum;
+}
+
 export default async function DashboardPage() {
   const supabase = await createClient();
   const {
@@ -70,19 +108,11 @@ export default async function DashboardPage() {
   // for the progress-over-time chart.
   const { data: sessions } = await supabase
     .from("sessions")
-    .select("created_at, mode, total_questions, result, levels")
+    .select("id, created_at, mode, total_questions, result, levels")
     .order("created_at", { ascending: false })
     .limit(100);
 
   const sessionRows = (sessions ?? []) as SessionRow[];
-  const chartPoints: SessionPoint[] = [...sessionRows]
-    .reverse()
-    .map((s) => ({
-      date: s.created_at,
-      level: s.result,
-      levelNum: LEVEL_NUM[s.result] ?? 0,
-      accuracy: sessionAccuracy(s.levels),
-    }));
   const recentSessions = sessionRows.slice(0, 15);
 
   // All session dates (lightweight) for the streak calendar.
@@ -96,11 +126,31 @@ export default async function DashboardPage() {
   // Recent attempts for aggregation (bounded for performance)
   const { data: attempts } = await supabase
     .from("attempts")
-    .select("item_type, item, level, correct, skipped, created_at")
+    .select("item_type, item, level, correct, skipped, created_at, session_id")
     .order("created_at", { ascending: false })
     .limit(1500);
 
   const rows = (attempts ?? []) as AttemptRow[];
+
+  // Per-session missed items → the "mini Kill List" shown when hovering a point
+  // on the progress chart. `null` for sessions whose attempts fall outside the
+  // recent window (so we can say "detail unavailable" rather than "none missed").
+  const sessionsWithAttempts = new Set(rows.map((a) => a.session_id));
+  const missedBySession = new Map<string, { item: string; level: string; type: string }[]>();
+  for (const a of rows) {
+    if (a.correct) continue;
+    const list = missedBySession.get(a.session_id) ?? [];
+    list.push({ item: a.item, level: a.level, type: a.item_type });
+    missedBySession.set(a.session_id, list);
+  }
+
+  const chartPoints: SessionPoint[] = [...sessionRows].reverse().map((s) => ({
+    date: s.created_at,
+    level: s.result,
+    levelNum: continuousLevel(s.levels) ?? LEVEL_NUM[s.result] ?? 0,
+    accuracy: sessionAccuracy(s.levels),
+    missed: sessionsWithAttempts.has(s.id) ? (missedBySession.get(s.id) ?? []) : null,
+  }));
 
   // Per-level accuracy
   const perLevel: Record<string, { total: number; correct: number }> = {};

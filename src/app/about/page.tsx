@@ -90,6 +90,52 @@ export default async function AboutPage() {
             </ul>
           </div>
 
+          <div className="card">
+            <h3 className="section-label">Sources & further reading</h3>
+            <ul className="method-list">
+              <li>
+                <a href="https://www.edrdg.org/wiki/index.php/KANJIDIC_Project" target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary)" }}>
+                  KANJIDIC2
+                </a>{" "}
+                — the kanji dictionary (meanings, readings, grades). © EDRDG, licensed CC BY-SA.
+              </li>
+              <li>
+                <a href="https://www.edrdg.org/jmdict/j_jmdict.html" target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary)" }}>
+                  JMdict
+                </a>{" "}
+                — the Japanese–English vocabulary dictionary. © EDRDG, licensed CC BY-SA.
+              </li>
+              <li>
+                <a href="https://github.com/scriptin/jmdict-simplified" target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary)" }}>
+                  jmdict-simplified
+                </a>{" "}
+                — the JSON packaging of the two dictionaries this app downloads and refreshes from.
+              </li>
+              <li>
+                <a href="https://en.wikipedia.org/wiki/J%C5%8Dy%C5%8D_kanji" target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary)" }}>
+                  Jōyō kanji
+                </a>{" "}
+                and{" "}
+                <a href="https://en.wikipedia.org/wiki/Ky%C5%8Diku_kanji" target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary)" }}>
+                  kyōiku (school-grade) kanji
+                </a>{" "}
+                — the grade system used here to approximate JLPT kanji levels.
+              </li>
+              <li>
+                <a href="https://en.wikipedia.org/wiki/Binomial_proportion_confidence_interval#Wilson_score_interval" target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary)" }}>
+                  Wilson score interval
+                </a>{" "}
+                — the statistics behind the estimated ranges.
+              </li>
+              <li>
+                <a href="https://www.jlpt.jp/e/" target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary)" }}>
+                  Official JLPT site
+                </a>{" "}
+                — note it deliberately does not publish official kanji/vocabulary lists, which is why levels here are approximated.
+              </li>
+            </ul>
+          </div>
+
           <div className="results-actions">
             <Link href="/" className="primary-btn" style={{ textAlign: "center" }}>
               Start a quiz

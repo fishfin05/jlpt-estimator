@@ -5,8 +5,9 @@ import { useState } from "react";
 export interface SessionPoint {
   date: string; // ISO timestamp
   level: string; // result label, e.g. "N4" or "Below N5"
-  levelNum: number; // 0 = Below N5 … 5 = N1
+  levelNum: number; // continuous 0 = Below N5 … 5 = N1 (levels mastered)
   accuracy: number | null; // 0–100, or null if unknown
+  missed: { item: string; level: string; type: string }[] | null; // null = detail unavailable
 }
 
 const LEVEL_LABELS = ["<N5", "N5", "N4", "N3", "N2", "N1"];
@@ -23,6 +24,7 @@ const PAD_B = 34;
 
 export default function ProgressChart({ points }: { points: SessionPoint[] }) {
   const [metric, setMetric] = useState<Metric>("level");
+  const [active, setActive] = useState<number>(points.length - 1);
 
   if (points.length === 0) return null;
 
@@ -161,25 +163,22 @@ export default function ProgressChart({ points }: { points: SessionPoint[] }) {
           <path d={linePath} fill="none" stroke="var(--primary, #6c8cff)" strokeWidth={2.5} />
         )}
 
-        {/* Points */}
+        {/* Points (with enlarged invisible hit area for hover/click) */}
         {points.map((p, i) => {
           const v = valueOf(p);
           if (v === null) return null;
+          const isActive = i === active;
           return (
-            <g key={i}>
+            <g key={i} style={{ cursor: "pointer" }} onMouseEnter={() => setActive(i)} onClick={() => setActive(i)}>
+              <circle cx={xAt(i)} cy={yAt(v)} r={11} fill="transparent" />
               <circle
                 cx={xAt(i)}
                 cy={yAt(v)}
-                r={4}
+                r={isActive ? 6 : 4}
                 fill="var(--primary, #6c8cff)"
-                stroke="var(--bg, #11111a)"
-                strokeWidth={1.5}
-              >
-                <title>
-                  {new Date(p.date).toLocaleString()} — {p.level}
-                  {p.accuracy !== null ? ` · ${p.accuracy}% accuracy` : ""}
-                </title>
-              </circle>
+                stroke={isActive ? "var(--text, #fff)" : "var(--bg, #11111a)"}
+                strokeWidth={isActive ? 2 : 1.5}
+              />
             </g>
           );
         })}
@@ -211,6 +210,68 @@ export default function ProgressChart({ points }: { points: SessionPoint[] }) {
           </span>
         )}
       </p>
+
+      {/* Detail panel for the hovered/selected point: the per-quiz mini Kill List */}
+      {(() => {
+        const p = points[active] ?? points[points.length - 1];
+        return (
+          <div
+            style={{
+              marginTop: 10,
+              padding: "12px 14px",
+              background: "var(--bg2)",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius-sm)",
+            }}
+          >
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "baseline" }}>
+              <strong style={{ color: "var(--text)" }}>{new Date(p.date).toLocaleDateString()}</strong>
+              <span className="muted" style={{ fontSize: "0.82rem" }}>
+                Result <strong style={{ color: "var(--text)" }}>{p.level}</strong>
+                {p.accuracy !== null ? ` · ${p.accuracy}% accuracy` : ""}
+              </span>
+            </div>
+            <div style={{ marginTop: 8 }}>
+              {p.missed === null ? (
+                <span className="muted" style={{ fontSize: "0.8rem" }}>
+                  Per-item detail isn&apos;t available for this quiz.
+                </span>
+              ) : p.missed.length === 0 ? (
+                <span style={{ fontSize: "0.85rem", color: "var(--success)" }}>
+                  Nothing missed this quiz 🎉
+                </span>
+              ) : (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+                  <span className="muted" style={{ fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                    Missed:
+                  </span>
+                  {p.missed.map((m, k) => (
+                    <span
+                      key={k}
+                      style={{
+                        fontFamily: "'Noto Sans JP', sans-serif",
+                        fontSize: "0.95rem",
+                        padding: "2px 8px",
+                        borderRadius: 6,
+                        background: "var(--error-light)",
+                        color: "var(--text)",
+                        border: "1px solid rgba(239,68,68,0.3)",
+                      }}
+                      title={`${m.type} · ${m.level}`}
+                    >
+                      {m.item} <span className="muted" style={{ fontSize: "0.7rem" }}>{m.level}</span>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+            <p className="method-note" style={{ marginTop: 8, fontSize: "0.75rem" }}>
+              Hover or tap any point to see what you missed that quiz.
+              {isLevel ? " Height = levels mastered, so a point above the N4 line means solid N4 reaching toward N3." : ""}
+            </p>
+          </div>
+        );
+      })()}
     </div>
   );
 }
