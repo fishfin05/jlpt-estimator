@@ -7,6 +7,7 @@ export default function TopNav({ email }: { email?: string | null }) {
         日本語レベル測定
       </Link>
       <div className="nav-links">
+        <Link href="/about">About</Link>
         {email ? (
           <>
             <Link href="/">Quiz</Link>

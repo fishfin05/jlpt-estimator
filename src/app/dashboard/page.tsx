@@ -92,6 +92,35 @@ export default async function DashboardPage() {
     if (a.correct) perLevel[a.level].correct++;
   }
 
+  // Kill List: every item you've missed at least once, ordered easiest → hardest
+  // (N5 → N1) so you clear them from the bottom up.
+  const itemStats = new Map<
+    string,
+    { item: string; type: string; level: string; seen: number; missed: number }
+  >();
+  for (const a of rows) {
+    const key = `${a.item_type}:${a.item}`;
+    const s = itemStats.get(key) ?? {
+      item: a.item,
+      type: a.item_type,
+      level: a.level,
+      seen: 0,
+      missed: 0,
+    };
+    s.seen++;
+    if (!a.correct) s.missed++;
+    itemStats.set(key, s);
+  }
+  const killList = [...itemStats.values()]
+    .filter((s) => s.missed > 0)
+    .sort(
+      (a, b) =>
+        LEVELS.indexOf(a.level as (typeof LEVELS)[number]) -
+          LEVELS.indexOf(b.level as (typeof LEVELS)[number]) ||
+        b.missed - a.missed ||
+        b.seen - a.seen,
+    );
+
   const overallTotal = rows.length;
   const overallCorrect = rows.filter((a) => a.correct).length;
   const overallAcc = overallTotal ? Math.round((overallCorrect / overallTotal) * 100) : 0;
@@ -134,6 +163,7 @@ export default async function DashboardPage() {
 
               <ProgressChart points={chartPoints} />
 
+              <div className="dash-cols">
               <div className="card">
                 <h3 className="section-label">Accuracy by Level (recent {overallTotal} answers)</h3>
                 <table className="table">
@@ -162,6 +192,38 @@ export default async function DashboardPage() {
                 </table>
               </div>
 
+              <div className="card">
+                <h3 className="section-label">🎯 Kill List — missed items, N5 → N1</h3>
+                {killList.length === 0 ? (
+                  <p className="empty-hint">Nothing missed yet — nice.</p>
+                ) : (
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Item</th>
+                        <th>Type</th>
+                        <th>Level</th>
+                        <th>Missed</th>
+                        <th>Seen</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {killList.map((s) => (
+                        <tr key={`${s.type}:${s.item}`}>
+                          <td style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: "1.1rem" }}>{s.item}</td>
+                          <td className="muted">{s.type}</td>
+                          <td><span className={`level-tag ${s.level}`}>{s.level}</span></td>
+                          <td className="badge-wrong">{s.missed}</td>
+                          <td className="muted">{s.seen}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+              </div>
+
+              <div className="dash-cols">
               <div className="card">
                 <h3 className="section-label">Recent Sessions</h3>
                 <table className="table">
@@ -200,6 +262,7 @@ export default async function DashboardPage() {
                     Download CSV (spreadsheet)
                   </a>
                 </div>
+              </div>
               </div>
             </>
           )}
