@@ -1,5 +1,4 @@
 import { createClient } from "@/lib/supabase/server";
-import TopNav from "@/components/TopNav";
 import QuizLauncher from "@/components/QuizLauncher";
 
 export default async function HomePage() {
@@ -9,11 +8,8 @@ export default async function HomePage() {
   } = await supabase.auth.getUser();
 
   return (
-    <>
-      <TopNav email={user?.email} />
-      <main className="page-home">
-        <QuizLauncher loggedIn={!!user} />
-      </main>
-    </>
+    <main className="page-home">
+      <QuizLauncher loggedIn={!!user} />
+    </main>
   );
 }

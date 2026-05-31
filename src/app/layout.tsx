@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { createClient } from "@/lib/supabase/server";
+import { NavGuardProvider } from "@/components/NavGuardProvider";
+import TopNav from "@/components/TopNav";
 
 export const metadata: Metadata = {
   title: "JLPT Level Estimator",
@@ -7,11 +10,16 @@ export const metadata: Metadata = {
     "Adaptive Japanese kanji & vocabulary level estimator with typed input and progress tracking.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
   return (
     <html lang="en">
       <head>
@@ -22,7 +30,12 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body suppressHydrationWarning>{children}</body>
+      <body suppressHydrationWarning>
+        <NavGuardProvider>
+          <TopNav email={user?.email} />
+          {children}
+        </NavGuardProvider>
+      </body>
     </html>
   );
 }

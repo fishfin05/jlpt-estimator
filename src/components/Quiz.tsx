@@ -15,6 +15,7 @@ import {
   type ResultsSummary,
 } from "@/lib/types";
 import { saveSession, type AttemptPayload } from "@/lib/actions/save-session";
+import { useNavGuard } from "./NavGuardProvider";
 
 type View = "input" | "feedback" | "results";
 
@@ -40,6 +41,7 @@ export default function Quiz({
   loggedIn: boolean;
 }) {
   const router = useRouter();
+  const { blockedRef } = useNavGuard();
   const engineRef = useRef<QuizEngine | null>(null);
 
   const [view, setView] = useState<View>("input");
@@ -77,6 +79,25 @@ export default function Quiz({
       return () => clearTimeout(t);
     }
   }, [view, item]);
+
+  // Tell the global nav a quiz is in progress (so it warns before navigating
+  // away), and warn on tab close/refresh too. Cleared once results show.
+  useEffect(() => {
+    blockedRef.current = view !== "results";
+  }, [view, blockedRef]);
+  useEffect(() => {
+    function onBeforeUnload(e: BeforeUnloadEvent) {
+      if (blockedRef.current) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    }
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      blockedRef.current = false;
+    };
+  }, [blockedRef]);
 
   // ── Persistence ─────────────────────────────────────────
   const persist = useCallback(async (engine: QuizEngine, res: ResultsSummary) => {
@@ -237,14 +258,6 @@ export default function Quiz({
     setView("input");
   }, []);
 
-  const goHome = useCallback(() => {
-    const engine = engineRef.current;
-    if (!engine || engine.currentQuestion === 0 ||
-        window.confirm("Go back to the home screen? Your current session will be lost.")) {
-      router.push("/");
-    }
-  }, [router]);
-
   // ── Keyboard ────────────────────────────────────────────
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -300,9 +313,6 @@ export default function Quiz({
   return (
     <main className="page-quiz">
       <div className="quiz-header">
-        <button className="home-btn" onClick={goHome} type="button">
-          ← Home
-        </button>
         <div className="progress-wrap">
           <div className="progress-bar">
             <div className="progress-fill" style={{ width: `${progressPct}%` }} />

@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import TopNav from "@/components/TopNav";
 import ProgressChart, { type SessionPoint } from "@/components/ProgressChart";
 import StreakCalendar from "@/components/StreakCalendar";
 import PendingResultSaver from "@/components/PendingResultSaver";
@@ -95,9 +94,6 @@ function continuousLevel(levels: SessionRow["levels"]): number | null {
 
 export default async function DashboardPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
   // Counts
   const [{ count: sessionCount }, { count: attemptCount }] = await Promise.all([
@@ -184,9 +180,7 @@ export default async function DashboardPage() {
   const hasData = (sessionCount ?? 0) > 0;
 
   return (
-    <>
-      <TopNav email={user?.email} />
-      <main className="page-results">
+    <main className="page-results">
         <div className="dash-inner">
           <h2 style={{ fontSize: "1.5rem", fontWeight: 700, textAlign: "center" }}>Your Progress</h2>
 
@@ -371,6 +365,5 @@ export default async function DashboardPage() {
           </div>
         </div>
       </main>
-    </>
   );
 }

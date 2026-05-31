@@ -1,19 +1,8 @@
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
-import TopNav from "@/components/TopNav";
 
-export const dynamic = "force-dynamic";
-
-export default async function AboutPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+export default function AboutPage() {
   return (
-    <>
-      <TopNav email={user?.email} />
-      <main className="page-results">
+    <main className="page-results">
         <div className="results-inner">
           <h2>About</h2>
 
@@ -143,6 +132,5 @@ export default async function AboutPage() {
           </div>
         </div>
       </main>
-    </>
   );
 }
