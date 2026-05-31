@@ -1,17 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import type { KillListEntry } from "@/lib/proficiency";
 
 export interface SessionPoint {
   date: string; // ISO timestamp
   level: string; // result label, e.g. "N4" or "Below N5"
   levelNum: number; // continuous 0 = Below N5 … 5 = N1 (levels mastered)
   accuracy: number | null; // 0–100, or null if unknown
-  missed: { item: string; level: string; type: string }[] | null; // null = detail unavailable
+  killList: KillListEntry[] | null; // running kill list as of this quiz; null = unavailable
 }
 
 const LEVEL_LABELS = ["<N5", "N5", "N4", "N3", "N2", "N1"];
-const LEVEL_RANK: Record<string, number> = { N5: 0, N4: 1, N3: 2, N2: 3, N1: 4 };
+
+function TrendCell({ t }: { t: KillListEntry["trend"] }) {
+  if (t === "new") return <span style={{ color: "var(--primary)", fontSize: "0.72rem" }}>★</span>;
+  if (t === "same") return <span className="muted">—</span>;
+  if (t === "up") return <span style={{ color: "var(--error)" }} title="getting worse">▲</span>;
+  return <span style={{ color: "var(--success)" }} title="improving">▼</span>;
+}
 
 type Metric = "level" | "accuracy";
 
@@ -26,6 +33,10 @@ const PAD_B = 34;
 export default function ProgressChart({ points }: { points: SessionPoint[] }) {
   const [metric, setMetric] = useState<Metric>("level");
   const [active, setActive] = useState<number>(points.length - 1);
+  // Dates are formatted in the viewer's timezone, which only exists on the
+  // client — wait for mount so server (UTC) and client markup don't mismatch.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   if (points.length === 0) return null;
 
@@ -69,14 +80,28 @@ export default function ProgressChart({ points }: { points: SessionPoint[] }) {
           .join(" ")
       : "";
 
-  const fmtDate = (iso: string) =>
-    new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-
   // Only label a handful of x ticks to avoid crowding.
   const xTickIdx = (() => {
     if (n <= 6) return points.map((_, i) => i);
     const step = (n - 1) / 5;
     return Array.from({ length: 6 }, (_, k) => Math.round(k * step));
+  })();
+
+  // Label each tick with a date the first time that day appears, and the
+  // time-of-day otherwise — so multiple quizzes on one day don't all read
+  // "May 31". Formatted client-side (local timezone) once mounted.
+  const xLabels = (() => {
+    let lastDay = "";
+    return xTickIdx.map((i) => {
+      if (!mounted) return { i, label: "" };
+      const d = new Date(points[i].date);
+      const day = d.toLocaleDateString();
+      if (day !== lastDay) {
+        lastDay = day;
+        return { i, label: d.toLocaleDateString(undefined, { month: "short", day: "numeric" }) };
+      }
+      return { i, label: d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) };
+    });
   })();
 
   return (
@@ -185,7 +210,7 @@ export default function ProgressChart({ points }: { points: SessionPoint[] }) {
         })}
 
         {/* X labels */}
-        {xTickIdx.map((i) => (
+        {xLabels.map(({ i, label }) => (
           <text
             key={i}
             x={xAt(i)}
@@ -193,8 +218,9 @@ export default function ProgressChart({ points }: { points: SessionPoint[] }) {
             textAnchor="middle"
             fontSize={11}
             fill="var(--text-muted, #888)"
+            suppressHydrationWarning
           >
-            {fmtDate(points[i].date)}
+            {label}
           </text>
         ))}
       </svg>
@@ -212,9 +238,17 @@ export default function ProgressChart({ points }: { points: SessionPoint[] }) {
         )}
       </p>
 
-      {/* Detail panel for the hovered/selected point: the per-quiz mini Kill List */}
+      {/* Detail panel for the hovered/selected point: the running Kill List then */}
       {(() => {
         const p = points[active] ?? points[points.length - 1];
+        const when = mounted
+          ? new Date(p.date).toLocaleString(undefined, {
+              month: "short",
+              day: "numeric",
+              hour: "numeric",
+              minute: "2-digit",
+            })
+          : "";
         return (
           <div
             style={{
@@ -226,45 +260,47 @@ export default function ProgressChart({ points }: { points: SessionPoint[] }) {
             }}
           >
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "baseline" }}>
-              <strong style={{ color: "var(--text)" }}>{new Date(p.date).toLocaleDateString()}</strong>
+              <span suppressHydrationWarning style={{ color: "var(--text)", fontWeight: 600 }}>{when}</span>
               <span className="muted" style={{ fontSize: "0.82rem" }}>
-                Result <strong style={{ color: "var(--text)" }}>{p.level}</strong>
+                Result {p.level}
                 {p.accuracy !== null ? ` · ${p.accuracy}% accuracy` : ""}
               </span>
             </div>
             <div style={{ marginTop: 8 }}>
-              {p.missed === null ? (
+              {p.killList === null ? (
                 <span className="muted" style={{ fontSize: "0.8rem" }}>
-                  Per-item detail isn&apos;t available for this quiz.
+                  Detail isn&apos;t available this far back.
                 </span>
-              ) : p.missed.length === 0 ? (
+              ) : p.killList.length === 0 ? (
                 <span style={{ fontSize: "0.85rem", color: "var(--success)" }}>
-                  Nothing missed this quiz 🎉
+                  Nothing on the kill list yet.
                 </span>
               ) : (
                 <>
                   <span className="muted" style={{ fontSize: "0.7rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                    Missed this quiz ({p.missed.length}) — easiest first
+                    Kill list after this quiz
                   </span>
                   <div className="scroll-table" style={{ maxHeight: 220, marginTop: 6 }}>
                     <table className="table" style={{ fontSize: "0.8rem" }}>
                       <thead>
                         <tr>
                           <th>Item</th>
-                          <th>Type</th>
                           <th>Level</th>
+                          <th>Trend</th>
+                          <th>Missed</th>
+                          <th>Seen</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {[...p.missed]
-                          .sort((a, b) => (LEVEL_RANK[a.level] ?? 9) - (LEVEL_RANK[b.level] ?? 9))
-                          .map((m, k) => (
-                            <tr key={k}>
-                              <td style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: "1rem" }}>{m.item}</td>
-                              <td className="muted">{m.type}</td>
-                              <td><span className={`level-tag ${m.level}`}>{m.level}</span></td>
-                            </tr>
-                          ))}
+                        {p.killList.map((m) => (
+                          <tr key={m.key}>
+                            <td style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: "1rem" }}>{m.item}</td>
+                            <td><span className={`level-tag ${m.level}`}>{m.level}</span></td>
+                            <td><TrendCell t={m.trend} /></td>
+                            <td className="badge-wrong">{m.missed}</td>
+                            <td className="muted">{m.seen}</td>
+                          </tr>
+                        ))}
                       </tbody>
                     </table>
                   </div>
@@ -272,8 +308,7 @@ export default function ProgressChart({ points }: { points: SessionPoint[] }) {
               )}
             </div>
             <p className="method-note" style={{ marginTop: 8, fontSize: "0.75rem" }}>
-              Hover or tap any point to see what you missed that quiz.
-              {isLevel ? " Height = levels mastered, so a point above the N4 line means solid N4 reaching toward N3." : ""}
+              Hover or tap a point to see the kill list as it stood after that quiz.
             </p>
           </div>
         );

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import ProgressChart, { type SessionPoint } from "@/components/ProgressChart";
 import StreakCalendar from "@/components/StreakCalendar";
 import PendingResultSaver from "@/components/PendingResultSaver";
+import LocalTime from "@/components/LocalTime";
 import { buildProficiency, type KillListEntry } from "@/lib/proficiency";
 import { LEVELS } from "@/lib/types";
 
@@ -129,25 +130,34 @@ export default async function DashboardPage() {
 
   const rows = (attempts ?? []) as AttemptRow[];
 
-  // Per-session missed items → the "mini Kill List" shown when hovering a point
-  // on the progress chart. `null` for sessions whose attempts fall outside the
-  // recent window (so we can say "detail unavailable" rather than "none missed").
-  const sessionsWithAttempts = new Set(rows.map((a) => a.session_id));
-  const missedBySession = new Map<string, { item: string; level: string; type: string }[]>();
+  // For each session, the running Kill List as it stood right after that quiz
+  // (cumulative most-wanted up to that point), shown when hovering the chart.
+  // `null` for early sessions whose attempts are outside the recent window.
+  const attemptsBySession = new Map<string, AttemptRow[]>();
   for (const a of rows) {
-    if (a.correct) continue;
-    const list = missedBySession.get(a.session_id) ?? [];
-    list.push({ item: a.item, level: a.level, type: a.item_type });
-    missedBySession.set(a.session_id, list);
+    const list = attemptsBySession.get(a.session_id) ?? [];
+    list.push(a);
+    attemptsBySession.set(a.session_id, list);
   }
-
-  const chartPoints: SessionPoint[] = [...sessionRows].reverse().map((s) => ({
-    date: s.created_at,
-    level: s.result,
-    levelNum: continuousLevel(s.levels) ?? LEVEL_NUM[s.result] ?? 0,
-    accuracy: sessionAccuracy(s.levels),
-    missed: sessionsWithAttempts.has(s.id) ? (missedBySession.get(s.id) ?? []) : null,
-  }));
+  const cumulative: AttemptRow[] = [];
+  const chartPoints: SessionPoint[] = [...sessionRows].reverse().map((s) => {
+    cumulative.push(...(attemptsBySession.get(s.id) ?? []));
+    const snapshot =
+      cumulative.length > 0
+        ? buildProficiency(cumulative).killList.sort(
+            (a, b) =>
+              LEVELS.indexOf(a.level as (typeof LEVELS)[number]) -
+                LEVELS.indexOf(b.level as (typeof LEVELS)[number]) || b.missed - a.missed,
+          )
+        : null;
+    return {
+      date: s.created_at,
+      level: s.result,
+      levelNum: continuousLevel(s.levels) ?? LEVEL_NUM[s.result] ?? 0,
+      accuracy: sessionAccuracy(s.levels),
+      killList: snapshot,
+    };
+  });
 
   // Per-level accuracy
   const perLevel: Record<string, { total: number; correct: number }> = {};
@@ -253,9 +263,9 @@ export default async function DashboardPage() {
               </div>
 
               <div className="card">
-                <h3 className="section-label">🔫 Kill List — Top 10 Most Wanted</h3>
+                <h3 className="section-label">Kill List — your most-missed, easiest first</h3>
                 {killList.length === 0 ? (
-                  <p className="empty-hint">No outlaws yet — you haven&apos;t missed anything.</p>
+                  <p className="empty-hint">Nothing missed yet.</p>
                 ) : (
                   <table className="table">
                     <thead>
@@ -283,12 +293,14 @@ export default async function DashboardPage() {
               </div>
               </div>
 
-              <div className="card">
-                <h3 className="section-label">Your Knowledge — every item you&apos;ve been tested on</h3>
-                {knowledgeSorted.length === 0 ? (
-                  <p className="empty-hint">Take a quiz to start building your record.</p>
-                ) : (
-                  <div className="scroll-table">
+              {knowledgeSorted.length > 0 && (
+                <details className="card">
+                  <summary style={{ cursor: "pointer", listStyle: "revert" }}>
+                    <span className="section-label" style={{ margin: 0 }}>
+                      Everything you&apos;ve been tested on ({knowledgeSorted.length} items) — click to view
+                    </span>
+                  </summary>
+                  <div className="scroll-table" style={{ marginTop: 14 }}>
                     <table className="table">
                       <thead>
                         <tr>
@@ -314,8 +326,8 @@ export default async function DashboardPage() {
                       </tbody>
                     </table>
                   </div>
-                )}
-              </div>
+                </details>
+              )}
 
               <div className="dash-cols">
               <div className="card">
@@ -332,7 +344,7 @@ export default async function DashboardPage() {
                   <tbody>
                     {recentSessions.map((s, i) => (
                       <tr key={i}>
-                        <td className="muted">{new Date(s.created_at).toLocaleString()}</td>
+                        <td className="muted"><LocalTime iso={s.created_at} /></td>
                         <td>{s.mode}</td>
                         <td>{s.total_questions}</td>
                         <td><strong>{s.result}</strong></td>

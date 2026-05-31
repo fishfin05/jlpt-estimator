@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import type { Mode } from "@/lib/types";
 
@@ -75,6 +76,9 @@ export async function saveSession(
       return { ok: false, error: attemptsError.message };
     }
   }
+
+  // Invalidate the cached dashboard so a new quiz shows up without a refresh.
+  revalidatePath("/dashboard");
 
   return { ok: true, sessionId: session.id as string };
 }

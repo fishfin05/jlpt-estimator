@@ -62,10 +62,10 @@ export default function QuizLauncher({ loggedIn }: { loggedIn: boolean }) {
       <div className="card">
         <h2 className="section-label">How it works</h2>
         <ul className="method-list">
-          <li>Questions are drawn <strong>adaptively</strong> — the quiz focuses on your boundary level.</li>
-          <li>It builds a <strong>probability estimate</strong> across all JLPT levels (N5–N1) as you answer.</li>
-          <li>Type both the <strong>meaning</strong> and the <strong>reading</strong>. The reading field converts romaji to hiragana live as you type.</li>
-          <li><strong>Knowing</strong> a kanji = a correct meaning + at least one reading. <strong>Knowing</strong> a word = a correct meaning + the reading.</li>
+          <li>Questions are drawn adaptively — the quiz focuses on your boundary level.</li>
+          <li>It builds a probability estimate across all JLPT levels (N5–N1) as you answer.</li>
+          <li>Type the meaning and the reading. The reading field converts romaji to hiragana as you type.</li>
+          <li>Knowing a kanji means a correct meaning plus at least one reading; knowing a word means a correct meaning and the reading.</li>
         </ul>
       </div>
 
