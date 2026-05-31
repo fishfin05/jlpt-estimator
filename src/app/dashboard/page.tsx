@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import TopNav from "@/components/TopNav";
 import ProgressChart, { type SessionPoint } from "@/components/ProgressChart";
 import StreakCalendar from "@/components/StreakCalendar";
+import { buildProficiency, type KillListEntry } from "@/lib/proficiency";
 import { LEVELS } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +23,15 @@ interface SessionRow {
   total_questions: number;
   result: string;
   levels: Record<string, { correct?: number; total?: number }> | null;
+}
+
+function Movement({ m }: { m: KillListEntry["movement"] }) {
+  if (m.dir === "new")
+    return <span style={{ color: "var(--primary)", fontWeight: 700, fontSize: "0.72rem" }}>★ NEW</span>;
+  if (m.dir === "same") return <span className="muted">—</span>;
+  if (m.dir === "up")
+    return <span style={{ color: "var(--error)", fontWeight: 600 }}>▲ {m.delta}</span>;
+  return <span style={{ color: "var(--success)", fontWeight: 600 }}>▼ {m.delta}</span>;
 }
 
 const LEVEL_NUM: Record<string, number> = {
@@ -101,36 +111,20 @@ export default async function DashboardPage() {
     if (a.correct) perLevel[a.level].correct++;
   }
 
-  // Kill List: every item you've missed at least once, ordered easiest → hardest
-  // (N5 → N1) so you clear them from the bottom up.
-  const itemStats = new Map<
-    string,
-    { item: string; type: string; level: string; seen: number; missed: number }
-  >();
-  for (const a of rows) {
-    const key = `${a.item_type}:${a.item}`;
-    const s = itemStats.get(key) ?? {
-      item: a.item,
-      type: a.item_type,
-      level: a.level,
-      seen: 0,
-      missed: 0,
-    };
-    s.seen++;
-    if (!a.correct) s.missed++;
-    itemStats.set(key, s);
-  }
-  const killList = [...itemStats.values()]
-    .filter((s) => s.missed > 0)
-    // "Most wanted": worst offenders first (most missed), then most seen.
-    .sort(
-      (a, b) =>
-        b.missed - a.missed ||
-        b.seen - a.seen ||
-        LEVELS.indexOf(a.level as (typeof LEVELS)[number]) -
-          LEVELS.indexOf(b.level as (typeof LEVELS)[number]),
-    )
-    .slice(0, 10);
+  // Per-item proficiency powers both the Most Wanted board (with rank movement
+  // vs. before the latest quiz) and the knowledge table below.
+  const { all: knowledge, killList } = buildProficiency(
+    rows,
+    recentSessions[0]?.created_at ?? null,
+  );
+  const tagOrder: Record<string, number> = { Weak: 0, Shaky: 1, New: 2, Solid: 3 };
+  const knowledgeSorted = [...knowledge].sort(
+    (a, b) =>
+      tagOrder[a.tag] - tagOrder[b.tag] ||
+      LEVELS.indexOf(a.level as (typeof LEVELS)[number]) -
+        LEVELS.indexOf(b.level as (typeof LEVELS)[number]) ||
+      b.seen - a.seen,
+  );
 
   const overallTotal = rows.length;
   const overallCorrect = rows.filter((a) => a.correct).length;
@@ -214,19 +208,19 @@ export default async function DashboardPage() {
                     <thead>
                       <tr>
                         <th>#</th>
+                        <th>Move</th>
                         <th>Item</th>
-                        <th>Type</th>
                         <th>Level</th>
                         <th>Missed</th>
                         <th>Seen</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {killList.map((s, i) => (
+                      {killList.map((s) => (
                         <tr key={`${s.type}:${s.item}`}>
-                          <td className="muted" style={{ fontWeight: 700 }}>{i + 1}</td>
+                          <td className="muted" style={{ fontWeight: 700 }}>{s.rank}</td>
+                          <td><Movement m={s.movement} /></td>
                           <td style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: "1.1rem" }}>{s.item}</td>
-                          <td className="muted">{s.type}</td>
                           <td><span className={`level-tag ${s.level}`}>{s.level}</span></td>
                           <td className="badge-wrong">{s.missed}</td>
                           <td className="muted">{s.seen}</td>
@@ -236,6 +230,40 @@ export default async function DashboardPage() {
                   </table>
                 )}
               </div>
+              </div>
+
+              <div className="card">
+                <h3 className="section-label">Your Knowledge — every item you&apos;ve been tested on</h3>
+                {knowledgeSorted.length === 0 ? (
+                  <p className="empty-hint">Take a quiz to start building your record.</p>
+                ) : (
+                  <div className="scroll-table">
+                    <table className="table">
+                      <thead>
+                        <tr>
+                          <th>Item</th>
+                          <th>Type</th>
+                          <th>Level</th>
+                          <th>Seen</th>
+                          <th>Recent accuracy</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {knowledgeSorted.map((s) => (
+                          <tr key={s.key}>
+                            <td style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: "1.1rem" }}>{s.item}</td>
+                            <td className="muted">{s.type}</td>
+                            <td><span className={`level-tag ${s.level}`}>{s.level}</span></td>
+                            <td className="muted">{s.seen}</td>
+                            <td>{Math.round(s.recentAccuracy * 100)}%</td>
+                            <td><span className={`prof-tag prof-${s.tag}`}>{s.tag}</span></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
 
               <div className="dash-cols">
