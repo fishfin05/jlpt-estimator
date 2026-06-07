@@ -95,11 +95,11 @@ export default async function DashboardPage() {
     sessionDates,
     attempts,
   ] = await Promise.all([
-    sql`SELECT COUNT(*) FROM sessions WHERE user_id = ${user.id}` as Promise<{ count: string }[]>,
-    sql`SELECT COUNT(*) FROM attempts WHERE user_id = ${user.id}` as Promise<{ count: string }[]>,
-    sql`SELECT id, created_at, mode, total_questions, result, levels FROM sessions WHERE user_id = ${user.id} ORDER BY created_at DESC LIMIT 100` as Promise<SessionRow[]>,
-    sql`SELECT created_at FROM sessions WHERE user_id = ${user.id} ORDER BY created_at ASC LIMIT 2000` as Promise<{ created_at: string }[]>,
-    sql`SELECT item_type, item, level, correct, skipped, created_at, session_id FROM attempts WHERE user_id = ${user.id} ORDER BY created_at DESC LIMIT 1500` as Promise<AttemptRow[]>,
+    sql`SELECT COUNT(*) FROM sessions WHERE user_id = ${user.id}` as unknown as Promise<{ count: string }[]>,
+    sql`SELECT COUNT(*) FROM attempts WHERE user_id = ${user.id}` as unknown as Promise<{ count: string }[]>,
+    sql`SELECT id, created_at, mode, total_questions, result, levels FROM sessions WHERE user_id = ${user.id} ORDER BY created_at DESC LIMIT 100` as unknown as Promise<SessionRow[]>,
+    sql`SELECT created_at FROM sessions WHERE user_id = ${user.id} ORDER BY created_at ASC LIMIT 2000` as unknown as Promise<{ created_at: string }[]>,
+    sql`SELECT item_type, item, level, correct, skipped, created_at, session_id FROM attempts WHERE user_id = ${user.id} ORDER BY created_at DESC LIMIT 1500` as unknown as Promise<AttemptRow[]>,
   ])
 
   const sessionRows = sessions as SessionRow[]
