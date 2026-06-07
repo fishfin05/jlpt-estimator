@@ -30,8 +30,8 @@ export async function POST(request: Request) {
 
   const passwordHash = await hashPassword(password as string)
   const [user] = (await sql`
-    INSERT INTO app_users (id, email, password_hash, created_at, updated_at)
-    VALUES (gen_random_uuid(), ${cleanEmail}, ${passwordHash}, now(), now())
+    INSERT INTO app_users (email, password_hash)
+    VALUES (${cleanEmail}, ${passwordHash})
     RETURNING id
   `) as { id: string }[]
 
