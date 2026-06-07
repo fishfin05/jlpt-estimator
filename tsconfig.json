@@ -19,5 +19,5 @@
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules", "legacy", "simulate.js", "fetch-data.js", "debug-structure.js", "scripts"]
+  "exclude": ["node_modules", "legacy", "simulate.js", "fetch-data.js", "debug-structure.js", "scripts", "test"]
 }
