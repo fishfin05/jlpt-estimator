@@ -38,8 +38,8 @@ export async function POST(request: Request) {
   const token = newToken()
   const exp = expiresAt(30)
   await sql`
-    INSERT INTO app_sessions (id, user_id, token, status, expires_at, created_at)
-    VALUES (gen_random_uuid(), ${user.id}, ${token}, 'active', ${exp.toISOString()}, now())
+    INSERT INTO app_sessions (token, user_id, status, expires_at)
+    VALUES (${token}, ${user.id}, 'active', ${exp.toISOString()})
   `
 
   const res = NextResponse.json({ ok: true })
