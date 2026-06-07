@@ -14,8 +14,7 @@
     "test": "tsx test/run-tests.ts"
   },
   "dependencies": {
-    "@supabase/ssr": "^0.5.2",
-    "@supabase/supabase-js": "^2.45.4",
+    "@neondatabase/serverless": "^1.1.0",
     "fflate": "^0.8.2",
     "next": "^15.1.6",
     "react": "^19.0.0",

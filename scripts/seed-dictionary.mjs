@@ -2,98 +2,84 @@
 /**
  * seed-dictionary.mjs
  *
- * Loads data/kanji.json and data/vocab.json into the Supabase `kanji` and
- * `vocab` tables using the service-role key (bypasses RLS).
+ * Loads data/kanji.json and data/vocab.json into the Neon `kanji` and
+ * `vocab` tables.
  *
- * Run once after creating the database schema:
+ * Run once after creating the database tables:
  *   npm run seed
  *
  * Requires in .env.local:
- *   NEXT_PUBLIC_SUPABASE_URL
- *   SUPABASE_SERVICE_ROLE_KEY
+ *   DATABASE_URL
  */
 
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
-import { config } from "dotenv";
-import { createClient } from "@supabase/supabase-js";
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { dirname, join } from 'node:path'
+import { config } from 'dotenv'
+import { neon } from '@neondatabase/serverless'
 
-config({ path: ".env.local" });
+config({ path: '.env.local' })
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const root = join(__dirname, "..");
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const root = join(__dirname, '..')
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!url || !serviceKey) {
-  console.error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env.local");
-  process.exit(1);
+const DATABASE_URL = process.env.DATABASE_URL
+if (!DATABASE_URL) {
+  console.error('Missing DATABASE_URL in .env.local')
+  process.exit(1)
 }
 
-const supabase = createClient(url, serviceKey, { auth: { persistSession: false } });
-const LEVELS = ["N5", "N4", "N3", "N2", "N1"];
-
-function chunk(arr, size) {
-  const out = [];
-  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-  return out;
-}
-
-async function upsertAll(table, rows, onConflict) {
-  let inserted = 0;
-  for (const batch of chunk(rows, 500)) {
-    const { error } = await supabase.from(table).upsert(batch, { onConflict });
-    if (error) throw new Error(`${table}: ${error.message}`);
-    inserted += batch.length;
-    process.stdout.write(`\r  ${table}: ${inserted}/${rows.length}  `);
-  }
-  process.stdout.write("\n");
-}
+const sql = neon(DATABASE_URL)
+const LEVELS = ['N5', 'N4', 'N3', 'N2', 'N1']
 
 async function main() {
-  console.log("Reading data files...");
-  const kanjiData = JSON.parse(readFileSync(join(root, "data", "kanji.json"), "utf8"));
-  const vocabData = JSON.parse(readFileSync(join(root, "data", "vocab.json"), "utf8"));
+  console.log('Reading data files...')
+  const kanjiData = JSON.parse(readFileSync(join(root, 'data', 'kanji.json'), 'utf8'))
+  const vocabData = JSON.parse(readFileSync(join(root, 'data', 'vocab.json'), 'utf8'))
 
-  const kanjiRows = [];
+  const kanjiRows = []
   for (const level of LEVELS) {
     for (const k of kanjiData[level] || []) {
-      kanjiRows.push({
-        literal: k.kanji,
-        level,
-        meanings: k.meanings || [],
-        onyomi: k.onyomi || [],
-        kunyomi: k.kunyomi || [],
-      });
+      kanjiRows.push({ literal: k.kanji, level, meanings: k.meanings || [], onyomi: k.onyomi || [], kunyomi: k.kunyomi || [] })
     }
   }
 
-  const vocabRows = [];
-  const seen = new Set();
+  const vocabRows = []
+  const seen = new Set()
   for (const level of LEVELS) {
     for (const v of vocabData[level] || []) {
-      const key = `${v.word}|${v.reading}`;
-      if (seen.has(key)) continue; // table has unique(word, reading)
-      seen.add(key);
-      vocabRows.push({
-        word: v.word,
-        reading: v.reading,
-        level,
-        meanings: v.meanings || [],
-      });
+      const key = `${v.word}|${v.reading}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      vocabRows.push({ word: v.word, reading: v.reading, level, meanings: v.meanings || [] })
     }
   }
 
-  console.log(`Seeding ${kanjiRows.length} kanji and ${vocabRows.length} vocab rows...`);
-  await upsertAll("kanji", kanjiRows, "literal");
-  await upsertAll("vocab", vocabRows, "word,reading");
+  console.log(`Seeding ${kanjiRows.length} kanji...`)
+  for (let i = 0; i < kanjiRows.length; i += 200) {
+    const batch = kanjiRows.slice(i, i + 200)
+    await sql.transaction(batch.map(r =>
+      sql`INSERT INTO kanji (literal, level, meanings, onyomi, kunyomi)
+          VALUES (${r.literal}, ${r.level}, ${JSON.stringify(r.meanings)}, ${JSON.stringify(r.onyomi)}, ${JSON.stringify(r.kunyomi)})
+          ON CONFLICT (literal) DO UPDATE SET level=EXCLUDED.level, meanings=EXCLUDED.meanings, onyomi=EXCLUDED.onyomi, kunyomi=EXCLUDED.kunyomi`
+    ))
+    process.stdout.write(`\r  kanji: ${Math.min(i + 200, kanjiRows.length)}/${kanjiRows.length}  `)
+  }
+  process.stdout.write('\n')
 
-  console.log("\nDone. Dictionary is seeded.");
+  console.log(`Seeding ${vocabRows.length} vocab...`)
+  for (let i = 0; i < vocabRows.length; i += 200) {
+    const batch = vocabRows.slice(i, i + 200)
+    await sql.transaction(batch.map(r =>
+      sql`INSERT INTO vocab (word, reading, level, meanings)
+          VALUES (${r.word}, ${r.reading}, ${r.level}, ${JSON.stringify(r.meanings)})
+          ON CONFLICT (word, reading) DO UPDATE SET level=EXCLUDED.level, meanings=EXCLUDED.meanings`
+    ))
+    process.stdout.write(`\r  vocab: ${Math.min(i + 200, vocabRows.length)}/${vocabRows.length}  `)
+  }
+  process.stdout.write('\n')
+
+  console.log('\nDone. Dictionary is seeded.')
 }
 
-main().catch((e) => {
-  console.error("\nSeed failed:", e.message);
-  process.exit(1);
-});
+main().catch(e => { console.error('\nSeed failed:', e.message); process.exit(1) })

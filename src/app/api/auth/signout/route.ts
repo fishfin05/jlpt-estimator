@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
     const sql = getSql()
     await sql`DELETE FROM app_sessions WHERE token = ${token}`
   }
-  const res = NextResponse.redirect(new URL('/login', request.url), { status: 303 })
+  const res = NextResponse.json({ ok: true })
   res.cookies.set(COOKIE, '', { maxAge: 0, path: '/' })
   return res
 }

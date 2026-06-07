@@ -1,24 +1,17 @@
-import type { Metadata } from "next";
-import "./globals.css";
-import { createClient } from "@/lib/supabase/server";
-import { NavGuardProvider } from "@/components/NavGuardProvider";
-import TopNav from "@/components/TopNav";
+import type { Metadata } from 'next'
+import './globals.css'
+import { getUser } from '@/lib/auth-server'
+import { NavGuardProvider } from '@/components/NavGuardProvider'
+import TopNav from '@/components/TopNav'
 
 export const metadata: Metadata = {
-  title: "JLPT Level Estimator",
+  title: 'JLPT Level Estimator',
   description:
-    "Adaptive Japanese kanji & vocabulary level estimator with typed input and progress tracking.",
-};
+    'Adaptive Japanese kanji & vocabulary level estimator with typed input and progress tracking.',
+}
 
-export default async function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const user = await getUser()
 
   return (
     <html lang="en">
@@ -37,5 +30,5 @@ export default async function RootLayout({
         </NavGuardProvider>
       </body>
     </html>
-  );
+  )
 }
