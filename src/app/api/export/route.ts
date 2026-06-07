@@ -42,8 +42,8 @@ export async function GET(request: NextRequest) {
 
   const sql = getSql()
   const [sessions, attempts] = await Promise.all([
-    sql`SELECT id, created_at, mode, total_questions, result, levels FROM sessions WHERE user_id = ${user.id} ORDER BY created_at ASC` as Promise<SessionRow[]>,
-    sql`SELECT session_id, created_at, item_type, item, level, meaning_given, reading_given, meaning_correct, reading_correct, correct, skipped, challenged FROM attempts WHERE user_id = ${user.id} ORDER BY created_at ASC` as Promise<AttemptRow[]>,
+    sql`SELECT id, created_at, mode, total_questions, result, levels FROM sessions WHERE user_id = ${user.id} ORDER BY created_at ASC` as unknown as Promise<SessionRow[]>,
+    sql`SELECT session_id, created_at, item_type, item, level, meaning_given, reading_given, meaning_correct, reading_correct, correct, skipped, challenged FROM attempts WHERE user_id = ${user.id} ORDER BY created_at ASC` as unknown as Promise<AttemptRow[]>,
   ])
 
   const sessionRows = sessions ?? []
