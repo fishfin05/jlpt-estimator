@@ -284,40 +284,38 @@ function testProficiency() {
   check("食 trend is 'same' (no improvement)", foodTrend === "same", `${foodTrend}`);
 }
 
-// ─── Section 4: Live Supabase data ────────────────────────────
+// ─── Section 4: Live Neon dictionary data ─────────────────────
 async function testSupabase() {
-  section("4. Live Supabase dictionary data (optional)");
+  section("4. Live Neon dictionary data (optional)");
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) {
-    console.log("  – skipped (no Supabase env vars found in .env.local)");
+  const dbUrl = process.env.DATABASE_URL;
+  if (!dbUrl) {
+    console.log("  – skipped (no DATABASE_URL found in .env.local)");
     return;
   }
 
-  const { createClient } = await import("@supabase/supabase-js");
-  const sb = createClient(url, key, { auth: { persistSession: false } });
+  const { neon } = await import("@neondatabase/serverless");
+  const sql = neon(dbUrl);
 
   for (const table of ["kanji", "vocab"] as const) {
     for (const level of LEVELS) {
-      const { count, error } = await sb
-        .from(table)
-        .select("*", { count: "exact", head: true })
-        .eq("level", level);
-      if (error) {
-        check(`${table} ${level} query`, false, error.message);
-      } else {
-        check(`${table} ${level} has rows`, (count ?? 0) > 0, `${count} rows`);
+      try {
+        const rows = await sql`SELECT COUNT(*) FROM ${sql(table)} WHERE level = ${level}` as { count: string }[];
+        const count = parseInt(rows[0]?.count ?? "0");
+        check(`${table} ${level} has rows`, count > 0, `${count} rows`);
+      } catch (e) {
+        check(`${table} ${level} query`, false, (e as Error).message);
       }
     }
   }
 
-  // N1 kanji should be populated now (the bug we fixed).
-  const { count: n1 } = await sb.from("kanji").select("*", { count: "exact", head: true }).eq("level", "N1");
-  check("N1 kanji populated (>500)", (n1 ?? 0) > 500, `${n1} N1 kanji`);
+  // N1 kanji should be populated (grade-based mapping fix).
+  const n1rows = await sql`SELECT COUNT(*) FROM kanji WHERE level = 'N1'` as { count: string }[];
+  const n1 = parseInt(n1rows[0]?.count ?? "0");
+  check("N1 kanji populated (>500)", n1 > 500, `${n1} N1 kanji`);
 
   // Shape check
-  const { data: sample } = await sb.from("kanji").select("literal, level, meanings, onyomi, kunyomi").limit(1);
+  const sample = await sql`SELECT literal, level, meanings, onyomi, kunyomi FROM kanji LIMIT 1` as Record<string, unknown>[];
   const row = sample?.[0];
   check("kanji row shape (literal/level/meanings)", !!row && typeof row.literal === "string" && Array.isArray(row.meanings));
 }
