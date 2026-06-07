@@ -13,7 +13,14 @@ export async function POST(request: Request) {
   }
 
   const sql = getSql()
-  const existing = await sql`SELECT id FROM app_users WHERE email = ${cleanEmail}`
+  let existing: { id: string }[]
+  try {
+    existing = (await sql`SELECT id FROM app_users WHERE email = ${cleanEmail}`) as { id: string }[]
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('signup db error:', msg)
+    return NextResponse.json({ message: `DB error: ${msg}` }, { status: 500 })
+  }
   if (existing.length > 0) {
     return NextResponse.json(
       { message: 'An account with this email already exists. Try signing in instead.' },

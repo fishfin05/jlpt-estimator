@@ -10,9 +10,16 @@ export async function POST(request: Request) {
   }
 
   const sql = getSql()
-  const rows = (await sql`
-    SELECT id, password_hash FROM app_users WHERE email = ${cleanEmail}
-  `) as { id: string; password_hash: string }[]
+  let rows: { id: string; password_hash: string }[]
+  try {
+    rows = (await sql`
+      SELECT id, password_hash FROM app_users WHERE email = ${cleanEmail}
+    `) as { id: string; password_hash: string }[]
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('signin db error:', msg)
+    return NextResponse.json({ message: `DB error: ${msg}` }, { status: 500 })
+  }
 
   if (!rows.length || !(await verifyPassword(password as string, rows[0].password_hash))) {
     return NextResponse.json({ message: 'Invalid email or password.' }, { status: 401 })
